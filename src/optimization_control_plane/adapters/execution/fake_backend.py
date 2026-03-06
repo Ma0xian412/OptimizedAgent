@@ -4,7 +4,6 @@ from __future__ import annotations
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any
 
 from optimization_control_plane.domain.enums import EventKind
 from optimization_control_plane.domain.models import (

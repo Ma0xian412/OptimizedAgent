@@ -13,8 +13,8 @@ from optimization_control_plane.core.orchestration.inflight_registry import (
 )
 from optimization_control_plane.domain.enums import EventKind, TrialState
 from optimization_control_plane.domain.models import (
-    ExperimentSpec,
     ExecutionEvent,
+    ExperimentSpec,
     SamplerProfile,
 )
 from optimization_control_plane.domain.state import StudyRuntimeState

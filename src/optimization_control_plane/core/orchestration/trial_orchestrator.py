@@ -18,8 +18,8 @@ from optimization_control_plane.core.orchestration.inflight_registry import (
     InflightRegistry,
 )
 from optimization_control_plane.domain.models import (
-    ExperimentSpec,
     ExecutionEvent,
+    ExperimentSpec,
     SamplerProfile,
     StudyHandle,
 )
@@ -224,11 +224,9 @@ class TrialOrchestrator:
     def _reached_limit(self) -> bool:
         if self._stop_requested:
             return True
-        if self._max_trials is not None and self._study_state.total_finished >= self._max_trials:
+        if self._max_trials is not None and self._study_state.asked_trials >= self._max_trials:
             return True
-        if self._max_failures is not None and self._study_state.failed_trials >= self._max_failures:
-            return True
-        return False
+        return self._max_failures is not None and self._study_state.failed_trials >= self._max_failures
 
     def _sync_gauges(self) -> None:
         self._metrics.set_gauge(

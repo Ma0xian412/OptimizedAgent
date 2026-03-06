@@ -12,6 +12,7 @@ class StudyRuntimeState:
     completed_trials: int = 0
     pruned_trials: int = 0
     failed_trials: int = 0
+    asked_trials: int = 0
     active_cohort: str | None = None
 
     @property

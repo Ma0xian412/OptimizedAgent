@@ -103,7 +103,12 @@ def stable_json_serialize(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
-def compute_spec_hash(spec_id: str, meta: dict[str, Any], objective_config: dict[str, Any], execution_config: dict[str, Any]) -> str:
+def compute_spec_hash(
+    spec_id: str,
+    meta: dict[str, Any],
+    objective_config: dict[str, Any],
+    execution_config: dict[str, Any],
+) -> str:
     payload = stable_json_serialize({
         "spec_id": spec_id,
         "meta": meta,

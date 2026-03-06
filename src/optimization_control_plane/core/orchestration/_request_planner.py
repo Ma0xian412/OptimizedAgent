@@ -13,8 +13,8 @@ from optimization_control_plane.core.orchestration.inflight_registry import (
 )
 from optimization_control_plane.domain.enums import DispatchDecision, TrialState
 from optimization_control_plane.domain.models import (
-    ExperimentSpec,
     ExecutionRequest,
+    ExperimentSpec,
     SamplerProfile,
 )
 from optimization_control_plane.domain.state import ResourceState, StudyRuntimeState
@@ -57,6 +57,7 @@ def plan_and_fill(
             break
 
         trial = backend.ask(study_id)
+        study_state.asked_trials += 1
         metrics.inc("trials_asked_total")
         ctx = backend.open_trial_context(study_id, trial.trial_id)
 
@@ -159,11 +160,9 @@ def _should_stop_asking(
     max_trials: int | None,
     max_failures: int | None,
 ) -> bool:
-    if max_trials is not None and state.total_finished >= max_trials:
+    if max_trials is not None and state.asked_trials >= max_trials:
         return True
-    if max_failures is not None and state.failed_trials >= max_failures:
-        return True
-    return False
+    return max_failures is not None and state.failed_trials >= max_failures
 
 
 def _log_extra(

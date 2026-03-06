@@ -6,9 +6,9 @@ from optimization_control_plane.domain.enums import (
 )
 from optimization_control_plane.domain.models import (
     Checkpoint,
-    ExperimentSpec,
     ExecutionEvent,
     ExecutionRequest,
+    ExperimentSpec,
     ObjectiveResult,
     RunHandle,
     RunResult,
