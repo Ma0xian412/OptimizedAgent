@@ -32,7 +32,7 @@ from tests.conftest import (
 class AlwaysPruneScorer:
     """Returns a score for every checkpoint so pruner can act."""
     def score(self, checkpoint: Checkpoint, spec: Any) -> float | None:
-        return checkpoint.metrics.get("loss", 100.0)
+        return float(checkpoint.metrics.get("loss", 100.0))
 
 
 class TestPruning:

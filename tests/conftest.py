@@ -96,7 +96,8 @@ class StubProgressScorer:
         self._metric = metric_name
 
     def score(self, checkpoint: Checkpoint, spec: ExperimentSpec) -> float | None:
-        return checkpoint.metrics.get(self._metric)
+        val = checkpoint.metrics.get(self._metric)
+        return float(val) if val is not None else None
 
 
 class StubObjectiveEvaluator:
