@@ -15,6 +15,7 @@ from optimization_control_plane.domain.enums import EventKind, TrialState
 from optimization_control_plane.domain.models import (
     ExecutionEvent,
     ExperimentSpec,
+    ObjectiveResult,
     SamplerProfile,
 )
 from optimization_control_plane.domain.state import StudyRuntimeState
@@ -80,7 +81,14 @@ def handle_completed(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
 
     for binding in all_bindings:
         attrs = _build_attrs(obj.attrs, binding, leader_trial_id)
-        deps.result_store.write_trial_result(binding.trial_id, obj)
+        deps.result_store.write_trial_result(
+            binding.trial_id,
+            ObjectiveResult(
+                value=obj.value,
+                attrs=attrs,
+                artifact_refs=obj.artifact_refs,
+            ),
+        )
         deps.backend.tell(
             deps.study_id, binding.trial_id,
             TrialState.COMPLETE, obj.value, attrs,
@@ -104,10 +112,14 @@ def handle_cancelled(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
     is_pruned = event.reason == "pruned"
     state = TrialState.PRUNED if is_pruned else TrialState.FAIL
     counter = "trials_pruned_total" if is_pruned else "trials_failed_total"
+    error = TrialState.PRUNED if is_pruned else (event.reason or "CANCELLED")
 
     for binding in all_bindings:
         attrs = _build_attrs({}, binding, leader_trial_id)
-        deps.result_store.write_trial_failure(binding.trial_id, event.reason)
+        deps.result_store.write_trial_failure(
+            binding.trial_id,
+            _build_failure_payload(error, state, attrs),
+        )
         deps.backend.tell(deps.study_id, binding.trial_id, state, None, attrs)
         deps.metrics.inc(counter)
         logger.info(
@@ -130,7 +142,10 @@ def handle_failed(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
 
     for binding in all_bindings:
         attrs = _build_attrs({}, binding, leader_trial_id)
-        deps.result_store.write_trial_failure(binding.trial_id, event.error_code)
+        deps.result_store.write_trial_failure(
+            binding.trial_id,
+            _build_failure_payload(event.error_code or "UNKNOWN", TrialState.FAIL, attrs),
+        )
         deps.backend.tell(
             deps.study_id, binding.trial_id,
             TrialState.FAIL, None, attrs,
@@ -163,6 +178,18 @@ def _build_attrs(
         attrs["shared_run"] = True
         attrs["shared_run_leader_trial_id"] = leader_trial_id
     return attrs
+
+
+def _build_failure_payload(
+    error: str,
+    state: TrialState,
+    attrs: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "error": error,
+        "state": state,
+        "attrs": attrs,
+    }
 
 
 def _log_ctx(

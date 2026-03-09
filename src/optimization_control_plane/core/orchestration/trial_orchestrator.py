@@ -82,10 +82,7 @@ class TrialOrchestrator:
         self._profile = self._backend.get_sampler_profile(self._study_handle.study_id)
 
         max_in_flight = settings.get("parallelism", {}).get("max_in_flight_trials", 1)
-        self._resource_state = ResourceState(
-            configured_slots=max_in_flight,
-            free_slots=max_in_flight,
-        )
+        self._reset_runtime_state(max_in_flight)
 
         stop_cfg = settings.get("stop", {})
         self._max_trials = stop_cfg.get("max_trials")
@@ -245,3 +242,14 @@ class TrialOrchestrator:
             self._resource_state.free_slots = (
                 self._resource_state.configured_slots - self._study_state.active_executions
             )
+
+    def _reset_runtime_state(self, max_in_flight: int) -> None:
+        self._study_state = StudyRuntimeState()
+        self._resource_state = ResourceState(
+            configured_slots=max_in_flight,
+            free_slots=max_in_flight,
+        )
+        self._inflight = InflightRegistry()
+        self._request_buffer = []
+        self._stop_requested = False
+        self._metrics = Metrics()

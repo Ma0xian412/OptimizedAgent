@@ -138,22 +138,32 @@ class OptunaBackendAdapter:
         attrs: dict[str, Any] | None,
     ) -> None:
         study = self._get_study(study_id)
+        trial_number = self._parse_trial_id(trial_id)
+        incoming_attrs = dict(attrs or {})
+        if self._ensure_idempotent_terminal_payload(
+            study=study,
+            study_id=study_id,
+            trial_number=trial_number,
+            trial_id=trial_id,
+            state=state,
+            value=value,
+            attrs=incoming_attrs,
+        ):
+            return
+
         key = self._trial_key(study_id, trial_id)
         trial = self._live_trials.get(key)
         if trial is None:
-            logger.warning(
-                "tell called for non-live trial, "
-                "study_id=%s trial_id=%s state=%s (idempotent skip)",
-                study_id, trial_id, state,
+            raise KeyError(
+                f"no live trial for study_id={study_id}, trial_id={trial_id}"
             )
-            return
 
         optuna_state = _STATE_MAP.get(state)
         if optuna_state is None:
             raise ValueError(f"unknown trial state: {state}")
 
-        if attrs:
-            for k, v in attrs.items():
+        if incoming_attrs:
+            for k, v in incoming_attrs.items():
                 trial.set_user_attr(k, v)
 
         values: list[float] | None = [value] if value is not None else None
@@ -171,6 +181,94 @@ class OptunaBackendAdapter:
     @staticmethod
     def _trial_key(study_id: str, trial_id: str) -> str:
         return f"{study_id}::{trial_id}"
+
+    @staticmethod
+    def _parse_trial_id(trial_id: str) -> int:
+        try:
+            return int(trial_id)
+        except ValueError as exc:
+            raise ValueError(f"trial_id must be an integer string: {trial_id}") from exc
+
+    def _ensure_idempotent_terminal_payload(
+        self,
+        *,
+        study: optuna.Study,
+        study_id: str,
+        trial_number: int,
+        trial_id: str,
+        state: str,
+        value: float | None,
+        attrs: dict[str, Any],
+    ) -> bool:
+        frozen_trial = self._find_trial(study, trial_number)
+        if frozen_trial is None or frozen_trial.state not in _STATE_MAP.values():
+            return False
+
+        self._assert_matching_terminal_payload(
+            study_id=study_id,
+            trial_id=trial_id,
+            frozen_trial=frozen_trial,
+            state=state,
+            value=value,
+            attrs=attrs,
+        )
+        logger.info(
+            "idempotent tell skipped",
+            extra={"study_id": study_id, "trial_id": trial_id, "state": state},
+        )
+        return True
+
+    def _assert_matching_terminal_payload(
+        self,
+        *,
+        study_id: str,
+        trial_id: str,
+        frozen_trial: optuna.trial.FrozenTrial,
+        state: str,
+        value: float | None,
+        attrs: dict[str, Any],
+    ) -> None:
+        expected_state = _STATE_MAP.get(state)
+        if expected_state is None:
+            raise ValueError(f"unknown trial state: {state}")
+        if frozen_trial.state != expected_state:
+            raise ValueError(
+                "conflicting tell state for "
+                f"study_id={study_id}, trial_id={trial_id}: "
+                f"stored={frozen_trial.state.name}, incoming={state}"
+            )
+
+        if expected_state == optuna.trial.TrialState.COMPLETE:
+            if frozen_trial.value != value:
+                raise ValueError(
+                    "conflicting tell value for "
+                    f"study_id={study_id}, trial_id={trial_id}: "
+                    f"stored={frozen_trial.value}, incoming={value}"
+                )
+        elif value is not None:
+            raise ValueError(
+                "non-complete tell must not include value for "
+                f"study_id={study_id}, trial_id={trial_id}"
+            )
+
+        for key, expected_value in attrs.items():
+            stored_value = frozen_trial.user_attrs.get(key)
+            if stored_value != expected_value:
+                raise ValueError(
+                    "conflicting tell attrs for "
+                    f"study_id={study_id}, trial_id={trial_id}, attr={key}: "
+                    f"stored={stored_value}, incoming={expected_value}"
+                )
+
+    @staticmethod
+    def _find_trial(
+        study: optuna.Study,
+        trial_number: int,
+    ) -> optuna.trial.FrozenTrial | None:
+        for trial in study.get_trials(deepcopy=False):
+            if trial.number == trial_number:
+                return trial
+        return None
 
     def _resolve_study_name(self, settings: dict[str, Any]) -> str:
         name: str = settings.get("study_name", "default_study")
