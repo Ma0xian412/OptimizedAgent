@@ -39,12 +39,21 @@ class RandomSearchSpace:
 
 class SimpleRunSpecBuilder:
     def build(self, params: dict[str, Any], spec: ExperimentSpec) -> RunSpec:
-        return RunSpec(kind="backtest", config=dict(params), resources={})
+        return RunSpec(
+            kind="backtest",
+            target_config=dict(spec.target_config),
+            config=dict(params),
+            resources={},
+        )
 
 
 class DeterministicRunKeyBuilder:
     def build(self, run_spec: RunSpec, spec: ExperimentSpec) -> str:
-        payload = stable_json_serialize({"config": run_spec.config, "meta": spec.meta})
+        payload = stable_json_serialize({
+            "target_config": run_spec.target_config,
+            "config": run_spec.config,
+            "meta": spec.meta,
+        })
         return "run:" + hashlib.sha256(payload.encode()).hexdigest()[:24]
 
 
@@ -91,11 +100,17 @@ class TestRandomSamplerE2E:
             "sampler": {"type": "random", "seed": 42},
             "pruner": {"type": "nop"},
         }
+        target_cfg = {
+            "kind": "python_callable",
+            "ref": "tests.fixtures.blackboxes:echo_config",
+            "default_config": {},
+        }
         exec_cfg = {"executor_kind": "backtest", "default_resources": {"cpu": 1}}
         spec = ExperimentSpec(
             spec_id="e2e_random",
-            spec_hash=compute_spec_hash("e2e_random", spec_meta, obj_cfg, exec_cfg),
+            spec_hash=compute_spec_hash("e2e_random", spec_meta, target_cfg, obj_cfg, exec_cfg),
             meta=spec_meta,
+            target_config=target_cfg,
             objective_config=obj_cfg,
             execution_config=exec_cfg,
         )
@@ -103,6 +118,7 @@ class TestRandomSamplerE2E:
         settings = make_settings(
             spec_id="e2e_random",
             meta=spec_meta,
+            target_config=target_cfg,
             objective_config=obj_cfg,
             execution_config=exec_cfg,
             sampler={"type": "random", "seed": 42},

@@ -13,6 +13,7 @@ class ExperimentSpec:
     spec_id: str
     spec_hash: str
     meta: dict[str, Any]
+    target_config: dict[str, Any]
     objective_config: dict[str, Any]
     execution_config: dict[str, Any]
 
@@ -37,6 +38,7 @@ class TrialHandle:
 @dataclass(frozen=True)
 class RunSpec:
     kind: str
+    target_config: dict[str, Any]
     config: dict[str, Any]
     resources: dict[str, Any]
 
@@ -106,12 +108,14 @@ def stable_json_serialize(obj: Any) -> str:
 def compute_spec_hash(
     spec_id: str,
     meta: dict[str, Any],
+    target_config: dict[str, Any],
     objective_config: dict[str, Any],
     execution_config: dict[str, Any],
 ) -> str:
     payload = stable_json_serialize({
         "spec_id": spec_id,
         "meta": meta,
+        "target_config": target_config,
         "objective_config": objective_config,
         "execution_config": execution_config,
     })

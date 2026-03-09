@@ -79,3 +79,12 @@ def test_start_rejects_mismatched_spec_and_settings(tmp_path: Any) -> None:
 
     with pytest.raises(ValueError, match="provided spec does not match"):
         orch.start(spec=spec, settings=settings)
+
+
+def test_start_rejects_settings_without_target_config(tmp_path: Any) -> None:
+    orch = _build_orchestrator(str(tmp_path))
+    settings = make_settings(stop={"max_trials": 0})
+    settings.pop("target_config", None)
+
+    with pytest.raises(ValueError, match="missing=\\['target_config'\\]"):
+        orch.start(settings=settings)

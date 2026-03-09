@@ -17,6 +17,11 @@ from optimization_control_plane.ports.optimizer_backend import TrialContext
 
 def make_spec(**overrides: Any) -> ExperimentSpec:
     meta = overrides.pop("meta", {"dataset_version": "ds_v1", "engine_version": "e_v1"})
+    target_cfg = overrides.pop("target_config", {
+        "kind": "python_callable",
+        "ref": "tests.fixtures.blackboxes:echo_config",
+        "default_config": {"x": 0.0},
+    })
     obj_cfg = overrides.pop("objective_config", {
         "name": "test_loss",
         "version": "v1",
@@ -30,11 +35,12 @@ def make_spec(**overrides: Any) -> ExperimentSpec:
         "default_resources": {"cpu": 1},
     })
     spec_id = overrides.pop("spec_id", "test_spec")
-    spec_hash = compute_spec_hash(spec_id, meta, obj_cfg, exec_cfg)
+    spec_hash = compute_spec_hash(spec_id, meta, target_cfg, obj_cfg, exec_cfg)
     return ExperimentSpec(
         spec_id=spec_id,
         spec_hash=spec_hash,
         meta=meta,
+        target_config=target_cfg,
         objective_config=obj_cfg,
         execution_config=exec_cfg,
     )
@@ -44,6 +50,11 @@ def make_settings(**overrides: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
         "spec_id": "test_spec",
         "meta": {"dataset_version": "ds_v1", "engine_version": "e_v1"},
+        "target_config": {
+            "kind": "python_callable",
+            "ref": "tests.fixtures.blackboxes:echo_config",
+            "default_config": {"x": 0.0},
+        },
         "objective_config": {
             "name": "test_loss",
             "version": "v1",
@@ -79,6 +90,7 @@ class StubRunSpecBuilder:
     def build(self, params: dict[str, Any], spec: ExperimentSpec) -> RunSpec:
         return RunSpec(
             kind="test",
+            target_config=dict(spec.target_config),
             config=dict(params),
             resources=spec.execution_config.get("default_resources", {}),
         )
@@ -88,6 +100,7 @@ class StubRunKeyBuilder:
     def build(self, run_spec: RunSpec, spec: ExperimentSpec) -> str:
         payload = stable_json_serialize({
             "kind": run_spec.kind,
+            "target_config": run_spec.target_config,
             "config": run_spec.config,
             "meta": spec.meta,
         })

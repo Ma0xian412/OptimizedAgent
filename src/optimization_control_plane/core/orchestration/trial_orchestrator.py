@@ -34,7 +34,13 @@ from optimization_control_plane.ports.result_store import ResultStore
 logger = logging.getLogger(__name__)
 
 _EVENT_LOOP_TIMEOUT = 1.0
-_SPEC_SETTINGS_KEYS = ("spec_id", "meta", "objective_config", "execution_config")
+_SPEC_SETTINGS_KEYS = (
+    "spec_id",
+    "meta",
+    "target_config",
+    "objective_config",
+    "execution_config",
+)
 
 
 class TrialOrchestrator:
@@ -302,9 +308,12 @@ class TrialOrchestrator:
         if not isinstance(spec_id, str) or not spec_id:
             raise ValueError("settings spec_id must be a non-empty string")
         meta = self._read_required_dict(payload, "meta")
+        target_config = self._read_required_dict(payload, "target_config")
         objective_config = self._augment_objective_config(payload, settings)
         execution_config = self._read_required_dict(payload, "execution_config")
-        computed_hash = compute_spec_hash(spec_id, meta, objective_config, execution_config)
+        computed_hash = compute_spec_hash(
+            spec_id, meta, target_config, objective_config, execution_config
+        )
         provided_hash = payload.get("spec_hash")
         if provided_hash is not None and provided_hash != computed_hash:
             raise ValueError(
@@ -316,6 +325,7 @@ class TrialOrchestrator:
             spec_id=spec_id,
             spec_hash=spec_hash,
             meta=meta,
+            target_config=target_config,
             objective_config=objective_config,
             execution_config=execution_config,
         )
