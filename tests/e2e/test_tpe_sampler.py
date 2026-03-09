@@ -98,7 +98,6 @@ class TestTPESamplerE2E:
         )
 
         orch.start(spec, settings)
-        orch.run_loop()
 
         m = orch.metrics.snapshot()
         assert m["trials_completed_total"] == 15

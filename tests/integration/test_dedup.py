@@ -66,7 +66,6 @@ class TestDedup:
             parallelism={"max_in_flight_trials": 3},
         )
         orch.start(spec, settings)
-        orch.run_loop()
 
         m = orch.metrics.snapshot()
         assert m["execution_submitted_total"] == 1

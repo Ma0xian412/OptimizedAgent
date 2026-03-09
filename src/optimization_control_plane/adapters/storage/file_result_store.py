@@ -43,7 +43,16 @@ class FileResultStore:
 
     def write_trial_failure(self, trial_id: str, error: Any) -> None:
         path = self._base / _TRIAL_FAILURES_DIR / safe_filename(trial_id)
-        atomic_write_json(path, {
+        atomic_write_json(path, _failure_payload(trial_id, error))
+
+
+def _failure_payload(trial_id: str, error: Any) -> dict[str, Any]:
+    if isinstance(error, dict):
+        return {
             "trial_id": trial_id,
-            "error": str(error),
-        })
+            **error,
+        }
+    return {
+        "trial_id": trial_id,
+        "error": str(error),
+    }

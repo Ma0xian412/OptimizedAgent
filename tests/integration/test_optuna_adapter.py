@@ -82,3 +82,12 @@ class TestOptunaAskTell:
         trial = adapter.ask(handle.study_id)
         adapter.tell(handle.study_id, trial.trial_id, TrialState.COMPLETE, 0.5, None)
         adapter.tell(handle.study_id, trial.trial_id, TrialState.COMPLETE, 0.5, None)
+
+    def test_tell_conflict_after_told_raises(self, adapter: OptunaBackendAdapter) -> None:
+        spec = make_spec()
+        handle = adapter.open_or_resume_experiment(spec, make_settings())
+        trial = adapter.ask(handle.study_id)
+        adapter.tell(handle.study_id, trial.trial_id, TrialState.COMPLETE, 0.5, {"k": "v"})
+
+        with pytest.raises(ValueError, match="conflicting tell state"):
+            adapter.tell(handle.study_id, trial.trial_id, TrialState.PRUNED, None, {"k": "v"})

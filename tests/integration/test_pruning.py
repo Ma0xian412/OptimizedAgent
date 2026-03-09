@@ -79,7 +79,6 @@ class TestPruning:
 
         spec = make_spec()
         orch.start(spec, settings)
-        orch.run_loop()
 
         m = orch.metrics.snapshot()
         total = m["trials_completed_total"] + m["trials_pruned_total"] + m["trials_failed_total"]

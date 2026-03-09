@@ -1,7 +1,9 @@
 """E2E-3/4/5: Leader fan-out to followers — complete, pruned, failed."""
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 from typing import Any
 
 from optimization_control_plane.adapters.execution import FakeExecutionBackend, FakeRunScript
@@ -27,6 +29,14 @@ from tests.conftest import (
     make_settings,
     make_spec,
 )
+
+
+def _load_records(base_dir: str, subdir: str) -> list[dict[str, Any]]:
+    directory = Path(base_dir) / "data" / subdir
+    return [
+        json.loads(path.read_text(encoding="utf-8"))
+        for path in sorted(directory.glob("*.json"))
+    ]
 
 
 def _make_orchestrator(
@@ -77,11 +87,18 @@ class TestLeaderCompleteFollowerFanout:
         )
 
         orch.start(spec, settings)
-        orch.run_loop()
 
         m = orch.metrics.snapshot()
         assert m["trials_completed_total"] == 5
         assert m["execution_submitted_total"] == 1
+        records = _load_records(str(tmp_path), "trial_results")
+        assert len(records) == 5
+        assert any(record["attrs"].get("shared_run") is True for record in records)
+        assert any(
+            record["attrs"].get("shared_run_leader_trial_id") is not None
+            for record in records
+            if record["attrs"].get("shared_run") is True
+        )
 
 
 class TestLeaderFailedFollowerFanout:
@@ -99,7 +116,6 @@ class TestLeaderFailedFollowerFanout:
         )
 
         orch.start(spec, settings)
-        orch.run_loop()
 
         m = orch.metrics.snapshot()
         assert m["trials_failed_total"] >= 1
@@ -121,8 +137,12 @@ class TestLeaderPrunedFollowerFanout:
         )
 
         orch.start(spec, settings)
-        orch.run_loop()
 
         m = orch.metrics.snapshot()
         assert m["trials_pruned_total"] >= 1
         assert m["execution_submitted_total"] >= 1
+        records = _load_records(str(tmp_path), "trial_failures")
+        assert len(records) == 5
+        assert all(record["error"] == "PRUNED" for record in records)
+        assert all(record["state"] == "PRUNED" for record in records)
+        assert any(record["attrs"].get("shared_run") is True for record in records)
