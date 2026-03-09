@@ -414,10 +414,10 @@ class InflightRegistry {
 
 class TrialOrchestrator {
   +start(spec, settings)
-  +run_loop()
+  -_run_loop()
   +stop()
-  +plan_requests()
-  +handle_event(event)
+  -_plan_requests()
+  -_handle_event(event)
 }
 
 OptimizerBackend <|.. OptunaBackendAdapter
@@ -788,10 +788,16 @@ end
 ```python
 class TrialOrchestrator:
     def start(self, spec, settings) -> None: ...
-    def run_loop(self) -> None: ...
     def stop(self) -> None: ...
-    def plan_requests(self) -> None: ...
-    def handle_event(self, event) -> None: ...
+```
+
+### 私有方法
+
+```python
+class TrialOrchestrator:
+    def _run_loop(self) -> None: ...
+    def _plan_requests(self) -> None: ...
+    def _handle_event(self, event) -> None: ...
 ```
 
 ---
@@ -1613,9 +1619,9 @@ adapters/ → core/ → ports/ → domain/
 
 ### 实现要求
 - `start()`：启动阶段逻辑（open/resume experiment、获取 profile、初始化状态）
-- `run_loop()`：主循环（含缓存复用、in-flight dedup、提交、事件处理）
-- `plan_requests()`：请求规划（ask → sample → build → cache check → dedup → dispatch）
-- `handle_event()`：4 种事件处理（CHECKPOINT / COMPLETED / CANCELLED / FAILED）
+- `_run_loop()`：主循环（含缓存复用、in-flight dedup、提交、事件处理）
+- `_plan_requests()`：请求规划（ask → sample → build → cache check → dedup → dispatch）
+- `_handle_event()`：4 种事件处理（CHECKPOINT / COMPLETED / CANCELLED / FAILED）
 - `stop()`：优雅停止
 
 ### 验收标准
@@ -1907,7 +1913,7 @@ class ResultStore(Protocol):
 ## 附录 B：主循环伪代码（含 in-flight dedup）
 
 ```python
-def run_loop():
+def _run_loop():
     while not stop_requested:
         sync_runtime_state()
 
