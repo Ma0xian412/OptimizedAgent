@@ -82,11 +82,12 @@ class TestLeaderCompleteFollowerFanout:
 
         spec = make_spec()
         settings = make_settings(
+            spec=spec,
             stop={"max_trials": 5},
             parallelism={"max_in_flight_trials": 5},
         )
 
-        orch.start(spec, settings)
+        orch.start(spec=spec, settings=settings)
 
         m = orch.metrics.snapshot()
         assert m["trials_completed_total"] == 5
@@ -111,11 +112,12 @@ class TestLeaderFailedFollowerFanout:
 
         spec = make_spec()
         settings = make_settings(
+            spec=spec,
             stop={"max_trials": 5, "max_failures": 5},
             parallelism={"max_in_flight_trials": 5},
         )
 
-        orch.start(spec, settings)
+        orch.start(spec=spec, settings=settings)
 
         m = orch.metrics.snapshot()
         assert m["trials_failed_total"] >= 1
@@ -132,11 +134,12 @@ class TestLeaderPrunedFollowerFanout:
 
         spec = make_spec()
         settings = make_settings(
+            spec=spec,
             stop={"max_trials": 5, "max_failures": 5},
             parallelism={"max_in_flight_trials": 5},
         )
 
-        orch.start(spec, settings)
+        orch.start(spec=spec, settings=settings)
 
         m = orch.metrics.snapshot()
         assert m["trials_pruned_total"] >= 1

@@ -3,6 +3,9 @@ from __future__ import annotations
 import hashlib
 from typing import Any
 
+from optimization_control_plane.core.orchestration._start_spec import (
+    spec_to_settings_payload,
+)
 from optimization_control_plane.domain.models import (
     Checkpoint,
     ExperimentSpec,
@@ -38,7 +41,11 @@ def make_spec(**overrides: Any) -> ExperimentSpec:
     )
 
 
-def make_settings(**overrides: Any) -> dict[str, Any]:
+def make_settings(
+    *,
+    spec: ExperimentSpec | None = None,
+    **overrides: Any,
+) -> dict[str, Any]:
     base: dict[str, Any] = {
         "study_name": "test_study",
         "resume_if_exists": True,
@@ -47,6 +54,8 @@ def make_settings(**overrides: Any) -> dict[str, Any]:
         "parallelism": {"max_in_flight_trials": 2},
         "stop": {"max_trials": 10},
     }
+    if spec is not None:
+        base["spec"] = spec_to_settings_payload(spec)
     base.update(overrides)
     return base
 

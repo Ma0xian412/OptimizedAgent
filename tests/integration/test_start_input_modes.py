@@ -1,8 +1,10 @@
-"""IT: start() reinitializes runtime state per run."""
+"""IT: start() supports settings/spec input modes."""
 from __future__ import annotations
 
 import os
 from typing import Any
+
+import pytest
 
 from optimization_control_plane.adapters.execution import FakeExecutionBackend
 from optimization_control_plane.adapters.optuna import OptunaBackendAdapter
@@ -48,29 +50,34 @@ def _build_orchestrator(tmp_path: str) -> TrialOrchestrator:
     )
 
 
-def test_start_resets_runtime_state(tmp_path: Any) -> None:
+def test_start_accepts_settings_only(tmp_path: Any) -> None:
     orch = _build_orchestrator(str(tmp_path))
     spec = make_spec()
     settings = make_settings(
         spec=spec,
-        parallelism={"max_in_flight_trials": 3},
         stop={"max_trials": 0},
+        parallelism={"max_in_flight_trials": 1},
     )
 
-    orch.start(spec=spec, settings=settings)
-    first_state = orch.study_state
-    first_inflight = orch._inflight
-    first_buffer = orch._request_buffer
+    orch.start(settings=settings)
 
-    orch.study_state.completed_trials = 7
-    orch.stop()
-
-    orch.start(spec=spec, settings=settings)
-
-    assert orch.study_state is not first_state
-    assert orch.study_state.completed_trials == 0
-    assert orch._inflight is not first_inflight
-    assert orch._request_buffer is not first_buffer
-    assert orch._request_buffer == []
     assert orch.metrics.snapshot()["trials_asked_total"] == 0
-    assert orch._stop_requested is False
+
+
+def test_start_rejects_mismatched_spec(tmp_path: Any) -> None:
+    orch = _build_orchestrator(str(tmp_path))
+    spec = make_spec(spec_id="a")
+    mismatched = make_spec(spec_id="b")
+    settings = make_settings(spec=mismatched, stop={"max_trials": 0})
+
+    with pytest.raises(ValueError, match="spec mismatch"):
+        orch.start(spec=spec, settings=settings)
+
+
+def test_start_requires_settings_spec_when_both_provided(tmp_path: Any) -> None:
+    orch = _build_orchestrator(str(tmp_path))
+    spec = make_spec()
+    settings = make_settings(stop={"max_trials": 0})
+
+    with pytest.raises(ValueError, match="settings.spec is required"):
+        orch.start(spec=spec, settings=settings)

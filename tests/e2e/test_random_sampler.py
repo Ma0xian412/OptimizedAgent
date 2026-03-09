@@ -94,12 +94,13 @@ class TestRandomSamplerE2E:
         )
 
         settings = make_settings(
+            spec=spec,
             sampler={"type": "random", "seed": 42},
             stop={"max_trials": 10},
             parallelism={"max_in_flight_trials": 3},
         )
 
-        orch.start(spec, settings)
+        orch.start(spec=spec, settings=settings)
 
         m = orch.metrics.snapshot()
         assert m["trials_completed_total"] == 10

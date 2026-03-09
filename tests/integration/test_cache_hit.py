@@ -66,8 +66,12 @@ class TestObjectiveCacheHit:
     def test_objective_cache_skips_execution(self, tmp_path: Any) -> None:
         orch, exec_be = _build_orchestrator(str(tmp_path))
         spec = make_spec()
-        settings = make_settings(stop={"max_trials": 4}, parallelism={"max_in_flight_trials": 1})
-        orch.start(spec, settings)
+        settings = make_settings(
+            spec=spec,
+            stop={"max_trials": 4},
+            parallelism={"max_in_flight_trials": 1},
+        )
+        orch.start(spec=spec, settings=settings)
 
         m = orch.metrics.snapshot()
         assert m["objective_cache_hit_total"] >= 1
@@ -78,8 +82,12 @@ class TestRunCacheHit:
     def test_run_cache_hit_triggers_evaluator_only(self, tmp_path: Any) -> None:
         orch, exec_be = _build_orchestrator(str(tmp_path))
         spec = make_spec()
-        settings = make_settings(stop={"max_trials": 3}, parallelism={"max_in_flight_trials": 1})
-        orch.start(spec, settings)
+        settings = make_settings(
+            spec=spec,
+            stop={"max_trials": 3},
+            parallelism={"max_in_flight_trials": 1},
+        )
+        orch.start(spec=spec, settings=settings)
 
         m = orch.metrics.snapshot()
         assert m["execution_submitted_total"] == 1

@@ -1,4 +1,5 @@
 {
+  "start_mode": "both",
   "study": {
     "storage_dsn": "sqlite:///study.db",
     "study_name_prefix": "demo_"

@@ -96,10 +96,14 @@ class TestGracefulStop:
 
         spec = make_spec()
         settings = make_settings(
+            spec=spec,
             stop={"max_trials": 1000},
             parallelism={"max_in_flight_trials": 1},
         )
-        runner = threading.Thread(target=orch.start, args=(spec, settings))
+        runner = threading.Thread(
+            target=orch.start,
+            kwargs={"spec": spec, "settings": settings},
+        )
         runner.start()
         assert exec_be.submitted.wait(timeout=1)
         orch.stop()

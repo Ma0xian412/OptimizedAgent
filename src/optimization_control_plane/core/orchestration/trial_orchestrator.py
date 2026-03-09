@@ -14,6 +14,10 @@ from optimization_control_plane.core.orchestration._request_planner import (
     RequestBufferItem,
     _plan_and_fill,
 )
+from optimization_control_plane.core.orchestration._start_spec import (
+    assert_spec_matches_settings,
+    build_spec_from_settings,
+)
 from optimization_control_plane.core.orchestration.inflight_registry import (
     InflightRegistry,
 )
@@ -76,15 +80,32 @@ class TrialOrchestrator:
     def study_state(self) -> StudyRuntimeState:
         return self._study_state
 
-    def start(self, spec: ExperimentSpec, settings: dict[str, Any]) -> None:
-        self._study_handle = self._backend.open_or_resume_experiment(spec, settings)
+    def start(
+        self,
+        spec: ExperimentSpec | None = None,
+        settings: dict[str, Any] | None = None,
+    ) -> None:
+        settings_provided = settings is not None
+        resolved_settings = dict(settings or {})
+        spec_from_settings = build_spec_from_settings(resolved_settings)
+        if spec is None and spec_from_settings is None:
+            raise ValueError("either spec or settings.spec must be provided")
+        if spec is not None and settings_provided:
+            assert_spec_matches_settings(spec, spec_from_settings)
+        resolved_spec = spec if spec is not None else spec_from_settings
+        assert resolved_spec is not None
+
+        self._study_handle = self._backend.open_or_resume_experiment(
+            resolved_spec,
+            resolved_settings,
+        )
         self._spec = self._backend.get_spec(self._study_handle.study_id)
         self._profile = self._backend.get_sampler_profile(self._study_handle.study_id)
 
-        max_in_flight = settings.get("parallelism", {}).get("max_in_flight_trials", 1)
+        max_in_flight = resolved_settings.get("parallelism", {}).get("max_in_flight_trials", 1)
         self._reset_runtime_state(max_in_flight)
 
-        stop_cfg = settings.get("stop", {})
+        stop_cfg = resolved_settings.get("stop", {})
         self._max_trials = stop_cfg.get("max_trials")
         self._max_failures = stop_cfg.get("max_failures")
 

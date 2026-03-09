@@ -62,10 +62,11 @@ class TestDedup:
 
         spec = make_spec()
         settings = make_settings(
+            spec=spec,
             stop={"max_trials": 5},
             parallelism={"max_in_flight_trials": 3},
         )
-        orch.start(spec, settings)
+        orch.start(spec=spec, settings=settings)
 
         m = orch.metrics.snapshot()
         assert m["execution_submitted_total"] == 1

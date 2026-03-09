@@ -60,7 +60,9 @@ class TestPruning:
             objective_evaluator=StubObjectiveEvaluator(),
         )
 
+        spec = make_spec()
         settings = make_settings(
+            spec=spec,
             stop={"max_trials": 3},
             parallelism={"max_in_flight_trials": 1},
             pruner={"type": "median", "n_startup_trials": 0, "n_warmup_steps": 0},
@@ -77,8 +79,7 @@ class TestPruning:
             result_store=FileResultStore(os.path.join(str(tmp_path), "data")),
         )
 
-        spec = make_spec()
-        orch.start(spec, settings)
+        orch.start(spec=spec, settings=settings)
 
         m = orch.metrics.snapshot()
         total = m["trials_completed_total"] + m["trials_pruned_total"] + m["trials_failed_total"]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+# ruff: noqa: E402
 import argparse
 import hashlib
 import json
@@ -26,6 +27,9 @@ from optimization_control_plane.adapters.storage import (
     FileRunCache,
 )
 from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrator
+from optimization_control_plane.core.orchestration._start_spec import (
+    spec_to_settings_payload,
+)
 from optimization_control_plane.domain.models import (
     Checkpoint,
     ExperimentSpec,
@@ -39,6 +43,9 @@ from optimization_control_plane.ports.optimizer_backend import TrialContext
 
 DEFAULT_ROOT_CONFIG_PATH = Path("config/config.json")
 DEFAULT_METRIC_NAME = "metric_1"
+START_MODE_BOTH = "both"
+START_MODE_SPEC_ONLY = "spec_only"
+START_MODE_SETTINGS_ONLY = "settings_only"
 
 
 @dataclass(frozen=True)
@@ -240,7 +247,14 @@ def run(root_config_path: Path) -> dict[str, float]:
     orchestrator = build_orchestrator(framework_config, objective_definition)
 
     settings = _read_required_dict(framework_config, "settings", "framework config")
-    orchestrator.start(spec, settings)
+    settings_with_spec = _merge_settings_spec(settings, spec)
+    start_mode = str(framework_config.get("start_mode", START_MODE_BOTH))
+    _start_with_mode(
+        orchestrator=orchestrator,
+        start_mode=start_mode,
+        spec=spec,
+        settings=settings_with_spec,
+    )
     snapshot = orchestrator.metrics.snapshot()
     return {k: float(v) for k, v in snapshot.items()}
 
@@ -280,6 +294,32 @@ def _sample_dimension(ctx: TrialContext, dimension: dict[str, Any]) -> tuple[str
             raise ValueError(f"categorical dimension '{name}' requires non-empty choices")
         return name, ctx.suggest_categorical(name, choices)
     raise ValueError(f"unsupported search space dimension type: {dim_type}")
+
+
+def _merge_settings_spec(settings: dict[str, Any], spec: ExperimentSpec) -> dict[str, Any]:
+    merged_settings = dict(settings)
+    if "spec" not in merged_settings:
+        merged_settings["spec"] = spec_to_settings_payload(spec)
+    return merged_settings
+
+
+def _start_with_mode(
+    *,
+    orchestrator: TrialOrchestrator,
+    start_mode: str,
+    spec: ExperimentSpec,
+    settings: dict[str, Any],
+) -> None:
+    if start_mode == START_MODE_BOTH:
+        orchestrator.start(spec=spec, settings=settings)
+        return
+    if start_mode == START_MODE_SPEC_ONLY:
+        orchestrator.start(spec=spec)
+        return
+    if start_mode == START_MODE_SETTINGS_ONLY:
+        orchestrator.start(settings=settings)
+        return
+    raise ValueError(f"unsupported framework.start_mode: {start_mode}")
 
 
 def _resolve_config_path(base_dir: Path, raw_path: str) -> Path:

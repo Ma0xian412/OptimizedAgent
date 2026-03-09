@@ -92,12 +92,13 @@ class TestTPESamplerE2E:
         )
 
         settings = make_settings(
+            spec=spec,
             sampler={"type": "tpe", "n_startup_trials": 5, "constant_liar": True, "seed": 42},
             stop={"max_trials": 15},
             parallelism={"max_in_flight_trials": 4},
         )
 
-        orch.start(spec, settings)
+        orch.start(spec=spec, settings=settings)
 
         m = orch.metrics.snapshot()
         assert m["trials_completed_total"] == 15
