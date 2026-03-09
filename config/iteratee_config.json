@@ -1,0 +1,26 @@
+{
+  "spec": {
+    "spec_id": "demo_spec_v1",
+    "meta": {
+      "dataset_version": "ds_v1",
+      "engine_version": "engine_v1"
+    },
+    "objective_config": {
+      "name": "demo_objective",
+      "version": "v1",
+      "direction": "minimize",
+      "params": {}
+    },
+    "execution_config": {
+      "executor_kind": "backtest",
+      "default_resources": {
+        "cpu": 1
+      }
+    }
+  },
+  "objective": {
+    "run_kind": "backtest",
+    "metric_name": "metric_1",
+    "progress_metric_name": "loss"
+  }
+}

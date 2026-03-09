@@ -1,0 +1,25 @@
+{
+  "search_space": [
+    {
+      "name": "x",
+      "type": "float",
+      "low": 0.0,
+      "high": 10.0
+    },
+    {
+      "name": "y",
+      "type": "int",
+      "low": 1,
+      "high": 100
+    },
+    {
+      "name": "model",
+      "type": "categorical",
+      "choices": ["baseline", "enhanced"]
+    }
+  ],
+  "fixed_params": {
+    "batch_size": 64,
+    "lr": 0.001
+  }
+}

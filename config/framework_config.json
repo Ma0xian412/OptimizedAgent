@@ -1,0 +1,38 @@
+{
+  "study": {
+    "storage_dsn": "sqlite:///study.db",
+    "study_name_prefix": "demo_"
+  },
+  "storage": {
+    "data_dir": "data"
+  },
+  "execution": {
+    "default_run_result": {
+      "metrics": {
+        "metric_1": 0.42,
+        "loss": 0.58
+      },
+      "diagnostics": {
+        "runtime_sec": 1.0
+      },
+      "artifact_refs": []
+    }
+  },
+  "settings": {
+    "study_name": "quick_start",
+    "resume_if_exists": true,
+    "sampler": {
+      "type": "random",
+      "seed": 42
+    },
+    "pruner": {
+      "type": "nop"
+    },
+    "parallelism": {
+      "max_in_flight_trials": 3
+    },
+    "stop": {
+      "max_trials": 10
+    }
+  }
+}

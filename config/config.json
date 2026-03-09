@@ -1,0 +1,5 @@
+{
+  "framework_config_path": "framework_config.json",
+  "iteratee_config_path": "iteratee_config.json",
+  "hyperparams_config_path": "hyperparams_config.json"
+}
