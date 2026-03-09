@@ -3,9 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from optimization_control_plane.adapters.storage._file_helpers import (
-    atomic_write_json,
-    read_json,
-    safe_filename,
+    _atomic_write_json,
+    _read_json,
+    _safe_filename,
 )
 from optimization_control_plane.domain.models import ObjectiveResult
 
@@ -18,7 +18,7 @@ class FileObjectiveCache:
         self._dir.mkdir(parents=True, exist_ok=True)
 
     def get(self, objective_key: str) -> ObjectiveResult | None:
-        data = read_json(self._path(objective_key))
+        data = _read_json(self._path(objective_key))
         if data is None:
             return None
         return ObjectiveResult(
@@ -28,7 +28,7 @@ class FileObjectiveCache:
         )
 
     def put(self, objective_key: str, objective_result: ObjectiveResult) -> None:
-        atomic_write_json(self._path(objective_key), {
+        _atomic_write_json(self._path(objective_key), {
             "objective_key": objective_key,
             "value": objective_result.value,
             "attrs": objective_result.attrs,
@@ -36,4 +36,4 @@ class FileObjectiveCache:
         })
 
     def _path(self, objective_key: str) -> Path:
-        return self._dir / safe_filename(objective_key)
+        return self._dir / _safe_filename(objective_key)

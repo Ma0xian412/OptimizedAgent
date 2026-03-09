@@ -43,7 +43,7 @@ class EventHandlerDeps:
     metrics: Metrics
 
 
-def handle_checkpoint(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
+def _handle_checkpoint(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
     entry = deps.inflight_registry.get_by_handle(event.handle_id)
     scorer = deps.objective_def.progress_scorer
     if scorer is None or event.checkpoint is None:
@@ -64,7 +64,7 @@ def handle_checkpoint(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
         deps.execution_backend.cancel(entry.handle, reason="pruned")
 
 
-def handle_completed(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
+def _handle_completed(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
     entry = deps.inflight_registry.get_by_handle(event.handle_id)
     run_key = entry.run_key
     run_result = event.run_result
@@ -103,7 +103,7 @@ def handle_completed(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
     deps.study_state.active_executions -= 1
 
 
-def handle_cancelled(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
+def _handle_cancelled(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
     entry = deps.inflight_registry.get_by_handle(event.handle_id)
     run_key = entry.run_key
     all_bindings = deps.inflight_registry.pop_all_trials_for_run_key(run_key)
@@ -134,7 +134,7 @@ def handle_cancelled(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
     deps.study_state.active_executions -= 1
 
 
-def handle_failed(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
+def _handle_failed(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
     entry = deps.inflight_registry.get_by_handle(event.handle_id)
     run_key = entry.run_key
     all_bindings = deps.inflight_registry.pop_all_trials_for_run_key(run_key)
@@ -161,10 +161,10 @@ def handle_failed(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
 
 
 EVENT_HANDLERS = {
-    EventKind.CHECKPOINT: handle_checkpoint,
-    EventKind.COMPLETED: handle_completed,
-    EventKind.CANCELLED: handle_cancelled,
-    EventKind.FAILED: handle_failed,
+    EventKind.CHECKPOINT: _handle_checkpoint,
+    EventKind.COMPLETED: _handle_completed,
+    EventKind.CANCELLED: _handle_cancelled,
+    EventKind.FAILED: _handle_failed,
 }
 
 

@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 RequestBufferItem = tuple[ExecutionRequest, TrialBinding]
 
 
-def plan_and_fill(
+def _plan_and_fill(
     *,
     study_id: str,
     spec: ExperimentSpec,
