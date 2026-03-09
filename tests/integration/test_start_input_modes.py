@@ -79,5 +79,5 @@ def test_start_requires_settings_spec_when_both_provided(tmp_path: Any) -> None:
     spec = make_spec()
     settings = make_settings(stop={"max_trials": 0})
 
-    with pytest.raises(ValueError, match="settings.spec is required"):
+    with pytest.raises(ValueError, match="spec construction fields"):
         orch.start(spec=spec, settings=settings)

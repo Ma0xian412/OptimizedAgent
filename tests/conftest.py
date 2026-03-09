@@ -55,7 +55,7 @@ def make_settings(
         "stop": {"max_trials": 10},
     }
     if spec is not None:
-        base["spec"] = spec_to_settings_payload(spec)
+        base.update(spec_to_settings_payload(spec))
     base.update(overrides)
     return base
 

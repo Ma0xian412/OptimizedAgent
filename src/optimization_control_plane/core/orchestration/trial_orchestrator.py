@@ -89,7 +89,9 @@ class TrialOrchestrator:
         resolved_settings = dict(settings or {})
         spec_from_settings = build_spec_from_settings(resolved_settings)
         if spec is None and spec_from_settings is None:
-            raise ValueError("either spec or settings.spec must be provided")
+            raise ValueError(
+                "either spec or settings fields (spec_id/meta/objective_config/execution_config) must be provided",
+            )
         if spec is not None and settings_provided:
             assert_spec_matches_settings(spec, spec_from_settings)
         resolved_spec = spec if spec is not None else spec_from_settings

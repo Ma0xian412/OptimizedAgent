@@ -247,13 +247,13 @@ def run(root_config_path: Path) -> dict[str, float]:
     orchestrator = build_orchestrator(framework_config, objective_definition)
 
     settings = _read_required_dict(framework_config, "settings", "framework config")
-    settings_with_spec = _merge_settings_spec(settings, spec)
+    settings_for_start = _merge_settings_spec_fields(settings, spec)
     start_mode = str(framework_config.get("start_mode", START_MODE_BOTH))
     _start_with_mode(
         orchestrator=orchestrator,
         start_mode=start_mode,
         spec=spec,
-        settings=settings_with_spec,
+        settings=settings_for_start,
     )
     snapshot = orchestrator.metrics.snapshot()
     return {k: float(v) for k, v in snapshot.items()}
@@ -296,10 +296,12 @@ def _sample_dimension(ctx: TrialContext, dimension: dict[str, Any]) -> tuple[str
     raise ValueError(f"unsupported search space dimension type: {dim_type}")
 
 
-def _merge_settings_spec(settings: dict[str, Any], spec: ExperimentSpec) -> dict[str, Any]:
+def _merge_settings_spec_fields(settings: dict[str, Any], spec: ExperimentSpec) -> dict[str, Any]:
     merged_settings = dict(settings)
-    if "spec" not in merged_settings:
-        merged_settings["spec"] = spec_to_settings_payload(spec)
+    spec_payload = spec_to_settings_payload(spec)
+    for key, value in spec_payload.items():
+        if key not in merged_settings:
+            merged_settings[key] = value
     return merged_settings
 
 
