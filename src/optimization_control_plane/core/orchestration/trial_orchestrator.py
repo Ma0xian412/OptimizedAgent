@@ -12,7 +12,7 @@ from optimization_control_plane.core.orchestration._event_handler import (
 from optimization_control_plane.core.orchestration._metrics import Metrics
 from optimization_control_plane.core.orchestration._request_planner import (
     RequestBufferItem,
-    plan_and_fill,
+    _plan_and_fill,
 )
 from optimization_control_plane.core.orchestration.inflight_registry import (
     InflightRegistry,
@@ -97,9 +97,9 @@ class TrialOrchestrator:
                 "max_in_flight": max_in_flight,
             },
         )
-        self.run_loop()
+        self._run_loop()
 
-    def run_loop(self) -> None:
+    def _run_loop(self) -> None:
         assert self._study_handle is not None
         assert self._spec is not None
         assert self._profile is not None
@@ -120,7 +120,7 @@ class TrialOrchestrator:
                 self._profile, self._study_state, self._resource_state,
             )
 
-            self.plan_requests(study_id, target)
+            self._plan_requests(study_id, target)
             self._try_release_buffer(study_id)
 
             if not self._inflight.handles():
@@ -132,7 +132,7 @@ class TrialOrchestrator:
                 self._inflight.handles(), timeout=_EVENT_LOOP_TIMEOUT,
             )
             if event is not None:
-                self.handle_event(event)
+                self._handle_event(event)
 
         self._drain_remaining(study_id)
         logger.info("orchestrator stopped", extra={"study_id": study_id})
@@ -141,7 +141,7 @@ class TrialOrchestrator:
         self._stop_requested = True
         logger.info("graceful stop requested")
 
-    def plan_requests(self, study_id: str | None = None, target: int | None = None) -> None:
+    def _plan_requests(self, study_id: str | None = None, target: int | None = None) -> None:
         assert self._spec is not None
         assert self._profile is not None
         assert self._resource_state is not None
@@ -151,7 +151,7 @@ class TrialOrchestrator:
             self._profile, self._study_state, self._resource_state,
         )
 
-        plan_and_fill(
+        _plan_and_fill(
             study_id=sid,
             spec=self._spec,
             profile=self._profile,
@@ -173,7 +173,7 @@ class TrialOrchestrator:
             max_failures=self._max_failures,
         )
 
-    def handle_event(self, event: ExecutionEvent) -> None:
+    def _handle_event(self, event: ExecutionEvent) -> None:
         assert self._spec is not None
         assert self._profile is not None
         assert self._study_handle is not None
@@ -205,7 +205,7 @@ class TrialOrchestrator:
             self._inflight.handles(), timeout=_EVENT_LOOP_TIMEOUT,
         )
         if event is not None:
-            self.handle_event(event)
+            self._handle_event(event)
 
     def _drain_remaining(self, study_id: str) -> None:
         while self._inflight.handles():

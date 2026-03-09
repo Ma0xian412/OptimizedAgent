@@ -3,9 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from optimization_control_plane.adapters.storage._file_helpers import (
-    atomic_write_json,
-    read_json,
-    safe_filename,
+    _atomic_write_json,
+    _read_json,
+    _safe_filename,
 )
 from optimization_control_plane.domain.models import RunResult
 
@@ -18,7 +18,7 @@ class FileRunCache:
         self._dir.mkdir(parents=True, exist_ok=True)
 
     def get(self, run_key: str) -> RunResult | None:
-        data = read_json(self._path(run_key))
+        data = _read_json(self._path(run_key))
         if data is None:
             return None
         return RunResult(
@@ -28,7 +28,7 @@ class FileRunCache:
         )
 
     def put(self, run_key: str, run_result: RunResult) -> None:
-        atomic_write_json(self._path(run_key), {
+        _atomic_write_json(self._path(run_key), {
             "run_key": run_key,
             "metrics": run_result.metrics,
             "diagnostics": run_result.diagnostics,
@@ -36,4 +36,4 @@ class FileRunCache:
         })
 
     def _path(self, run_key: str) -> Path:
-        return self._dir / safe_filename(run_key)
+        return self._dir / _safe_filename(run_key)

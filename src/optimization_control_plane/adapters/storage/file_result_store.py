@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import Any
 
 from optimization_control_plane.adapters.storage._file_helpers import (
-    atomic_write_json,
-    safe_filename,
+    _atomic_write_json,
+    _safe_filename,
 )
 from optimization_control_plane.domain.models import ObjectiveResult, RunResult
 
@@ -22,8 +22,8 @@ class FileResultStore:
         (self._base / _TRIAL_FAILURES_DIR).mkdir(parents=True, exist_ok=True)
 
     def write_run_record(self, run_key: str, run_result: RunResult) -> None:
-        path = self._base / _RUN_RECORDS_DIR / safe_filename(run_key)
-        atomic_write_json(path, {
+        path = self._base / _RUN_RECORDS_DIR / _safe_filename(run_key)
+        _atomic_write_json(path, {
             "run_key": run_key,
             "metrics": run_result.metrics,
             "diagnostics": run_result.diagnostics,
@@ -33,8 +33,8 @@ class FileResultStore:
     def write_trial_result(
         self, trial_id: str, objective_result: ObjectiveResult
     ) -> None:
-        path = self._base / _TRIAL_RESULTS_DIR / safe_filename(trial_id)
-        atomic_write_json(path, {
+        path = self._base / _TRIAL_RESULTS_DIR / _safe_filename(trial_id)
+        _atomic_write_json(path, {
             "trial_id": trial_id,
             "value": objective_result.value,
             "attrs": objective_result.attrs,
@@ -42,8 +42,8 @@ class FileResultStore:
         })
 
     def write_trial_failure(self, trial_id: str, error: Any) -> None:
-        path = self._base / _TRIAL_FAILURES_DIR / safe_filename(trial_id)
-        atomic_write_json(path, _failure_payload(trial_id, error))
+        path = self._base / _TRIAL_FAILURES_DIR / _safe_filename(trial_id)
+        _atomic_write_json(path, _failure_payload(trial_id, error))
 
 
 def _failure_payload(trial_id: str, error: Any) -> dict[str, Any]:
