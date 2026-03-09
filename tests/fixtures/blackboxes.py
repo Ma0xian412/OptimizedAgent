@@ -27,6 +27,11 @@ def callable_target(config: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def return_invalid_result(config: dict[str, Any]) -> dict[str, Any]:
+    _ = config
+    return {"diagnostics": {"bad": True}}
+
+
 class StatefulClassTarget:
     def __init__(self) -> None:
         global _instance_seq
