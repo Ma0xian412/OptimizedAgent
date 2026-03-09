@@ -68,7 +68,6 @@ class TestObjectiveCacheHit:
         spec = make_spec()
         settings = make_settings(stop={"max_trials": 4}, parallelism={"max_in_flight_trials": 1})
         orch.start(spec, settings)
-        orch.run_loop()
 
         m = orch.metrics.snapshot()
         assert m["objective_cache_hit_total"] >= 1
@@ -81,7 +80,6 @@ class TestRunCacheHit:
         spec = make_spec()
         settings = make_settings(stop={"max_trials": 3}, parallelism={"max_in_flight_trials": 1})
         orch.start(spec, settings)
-        orch.run_loop()
 
         m = orch.metrics.snapshot()
         assert m["execution_submitted_total"] == 1

@@ -87,7 +87,6 @@ class TestLeaderCompleteFollowerFanout:
         )
 
         orch.start(spec, settings)
-        orch.run_loop()
 
         m = orch.metrics.snapshot()
         assert m["trials_completed_total"] == 5
@@ -117,7 +116,6 @@ class TestLeaderFailedFollowerFanout:
         )
 
         orch.start(spec, settings)
-        orch.run_loop()
 
         m = orch.metrics.snapshot()
         assert m["trials_failed_total"] >= 1
@@ -139,7 +137,6 @@ class TestLeaderPrunedFollowerFanout:
         )
 
         orch.start(spec, settings)
-        orch.run_loop()
 
         m = orch.metrics.snapshot()
         assert m["trials_pruned_total"] >= 1

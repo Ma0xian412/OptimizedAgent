@@ -51,7 +51,10 @@ def _build_orchestrator(tmp_path: str) -> TrialOrchestrator:
 def test_start_resets_runtime_state(tmp_path: Any) -> None:
     orch = _build_orchestrator(str(tmp_path))
     spec = make_spec()
-    settings = make_settings(parallelism={"max_in_flight_trials": 3})
+    settings = make_settings(
+        parallelism={"max_in_flight_trials": 3},
+        stop={"max_trials": 0},
+    )
 
     orch.start(spec, settings)
     first_state = orch.study_state

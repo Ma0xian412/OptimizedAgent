@@ -97,6 +97,7 @@ class TrialOrchestrator:
                 "max_in_flight": max_in_flight,
             },
         )
+        self.run_loop()
 
     def run_loop(self) -> None:
         assert self._study_handle is not None
