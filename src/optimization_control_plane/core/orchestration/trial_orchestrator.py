@@ -22,6 +22,7 @@ from optimization_control_plane.domain.models import (
     ExperimentSpec,
     SamplerProfile,
     StudyHandle,
+    compute_spec_hash,
 )
 from optimization_control_plane.domain.state import ResourceState, StudyRuntimeState
 from optimization_control_plane.ports.cache import ObjectiveCache, RunCache
@@ -33,6 +34,7 @@ from optimization_control_plane.ports.result_store import ResultStore
 logger = logging.getLogger(__name__)
 
 _EVENT_LOOP_TIMEOUT = 1.0
+_SPEC_SETTINGS_KEYS = ("spec_id", "meta", "objective_config", "execution_config")
 
 
 class TrialOrchestrator:
@@ -76,15 +78,22 @@ class TrialOrchestrator:
     def study_state(self) -> StudyRuntimeState:
         return self._study_state
 
-    def start(self, spec: ExperimentSpec, settings: dict[str, Any]) -> None:
-        self._study_handle = self._backend.open_or_resume_experiment(spec, settings)
+    def start(
+        self,
+        spec: ExperimentSpec | None = None,
+        settings: dict[str, Any] | None = None,
+    ) -> None:
+        resolved_settings = dict(settings or {})
+        resolved_spec = self._resolve_start_spec(spec=spec, settings=resolved_settings)
+
+        self._study_handle = self._backend.open_or_resume_experiment(resolved_spec)
         self._spec = self._backend.get_spec(self._study_handle.study_id)
         self._profile = self._backend.get_sampler_profile(self._study_handle.study_id)
 
-        max_in_flight = settings.get("parallelism", {}).get("max_in_flight_trials", 1)
+        max_in_flight = resolved_settings.get("parallelism", {}).get("max_in_flight_trials", 1)
         self._reset_runtime_state(max_in_flight)
 
-        stop_cfg = settings.get("stop", {})
+        stop_cfg = resolved_settings.get("stop", {})
         self._max_trials = stop_cfg.get("max_trials")
         self._max_failures = stop_cfg.get("max_failures")
 
@@ -254,3 +263,87 @@ class TrialOrchestrator:
         self._request_buffer = []
         self._stop_requested = False
         self._metrics = Metrics()
+
+    def _resolve_start_spec(
+        self,
+        *,
+        spec: ExperimentSpec | None,
+        settings: dict[str, Any],
+    ) -> ExperimentSpec:
+        if spec is None and not settings:
+            raise ValueError("start() requires at least one of spec or settings")
+
+        settings_spec: ExperimentSpec | None = None
+        if settings:
+            settings_spec = self._build_spec_from_settings(settings)
+
+        if spec is None:
+            assert settings_spec is not None
+            return settings_spec
+        if settings_spec is None:
+            return spec
+        if spec != settings_spec:
+            raise ValueError(
+                "provided spec does not match spec constructed from settings: "
+                f"given_hash={spec.spec_hash}, settings_hash={settings_spec.spec_hash}"
+            )
+        return spec
+
+    def _build_spec_from_settings(self, settings: dict[str, Any]) -> ExperimentSpec:
+        payload = self._read_spec_payload(settings)
+        missing = [key for key in _SPEC_SETTINGS_KEYS if key not in payload]
+        if missing:
+            raise ValueError(
+                "settings must include spec fields to construct ExperimentSpec: "
+                f"missing={missing}"
+            )
+
+        spec_id = payload["spec_id"]
+        if not isinstance(spec_id, str) or not spec_id:
+            raise ValueError("settings spec_id must be a non-empty string")
+        meta = self._read_required_dict(payload, "meta")
+        objective_config = self._augment_objective_config(payload, settings)
+        execution_config = self._read_required_dict(payload, "execution_config")
+        computed_hash = compute_spec_hash(spec_id, meta, objective_config, execution_config)
+        provided_hash = payload.get("spec_hash")
+        if provided_hash is not None and provided_hash != computed_hash:
+            raise ValueError(
+                "settings provided spec_hash does not match computed spec_hash: "
+                f"provided={provided_hash}, computed={computed_hash}"
+            )
+        spec_hash = provided_hash if isinstance(provided_hash, str) else computed_hash
+        return ExperimentSpec(
+            spec_id=spec_id,
+            spec_hash=spec_hash,
+            meta=meta,
+            objective_config=objective_config,
+            execution_config=execution_config,
+        )
+
+    @staticmethod
+    def _read_spec_payload(settings: dict[str, Any]) -> dict[str, Any]:
+        payload = settings.get("spec", settings)
+        if not isinstance(payload, dict):
+            raise ValueError("settings.spec must be a dict when provided")
+        return payload
+
+    @staticmethod
+    def _read_required_dict(payload: dict[str, Any], key: str) -> dict[str, Any]:
+        value = payload.get(key)
+        if not isinstance(value, dict):
+            raise ValueError(f"settings {key} must be a dict")
+        return dict(value)
+
+    def _augment_objective_config(
+        self,
+        payload: dict[str, Any],
+        settings: dict[str, Any],
+    ) -> dict[str, Any]:
+        objective_config = self._read_required_dict(payload, "objective_config")
+        sampler = settings.get("sampler")
+        pruner = settings.get("pruner")
+        if isinstance(sampler, dict):
+            objective_config["sampler"] = dict(sampler)
+        if isinstance(pruner, dict):
+            objective_config["pruner"] = dict(pruner)
+        return objective_config

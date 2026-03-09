@@ -22,6 +22,8 @@ def make_spec(**overrides: Any) -> ExperimentSpec:
         "version": "v1",
         "direction": "minimize",
         "params": {},
+        "sampler": {"type": "random", "seed": 42},
+        "pruner": {"type": "nop"},
     })
     exec_cfg = overrides.pop("execution_config", {
         "executor_kind": "backtest",
@@ -40,8 +42,20 @@ def make_spec(**overrides: Any) -> ExperimentSpec:
 
 def make_settings(**overrides: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
-        "study_name": "test_study",
-        "resume_if_exists": True,
+        "spec_id": "test_spec",
+        "meta": {"dataset_version": "ds_v1", "engine_version": "e_v1"},
+        "objective_config": {
+            "name": "test_loss",
+            "version": "v1",
+            "direction": "minimize",
+            "params": {},
+            "sampler": {"type": "random", "seed": 42},
+            "pruner": {"type": "nop"},
+        },
+        "execution_config": {
+            "executor_kind": "backtest",
+            "default_resources": {"cpu": 1},
+        },
         "sampler": {"type": "random", "seed": 42},
         "pruner": {"type": "nop"},
         "parallelism": {"max_in_flight_trials": 2},
