@@ -22,9 +22,7 @@ class TrialContext(Protocol):
 
 @runtime_checkable
 class OptimizerBackend(Protocol):
-    def open_or_resume_experiment(
-        self, spec: ExperimentSpec, settings: dict[str, Any]
-    ) -> StudyHandle: ...
+    def open_or_resume_experiment(self, spec: ExperimentSpec) -> StudyHandle: ...
 
     def get_spec(self, study_id: str) -> ExperimentSpec: ...
 

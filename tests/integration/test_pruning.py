@@ -77,7 +77,14 @@ class TestPruning:
             result_store=FileResultStore(os.path.join(str(tmp_path), "data")),
         )
 
-        spec = make_spec()
+        spec = make_spec(objective_config={
+            "name": "test_loss",
+            "version": "v1",
+            "direction": "minimize",
+            "params": {},
+            "sampler": {"type": "random", "seed": 42},
+            "pruner": {"type": "median", "n_startup_trials": 0, "n_warmup_steps": 0},
+        })
         orch.start(spec, settings)
 
         m = orch.metrics.snapshot()

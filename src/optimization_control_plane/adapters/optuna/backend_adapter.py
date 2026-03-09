@@ -45,10 +45,8 @@ class OptunaBackendAdapter:
         self._specs: dict[str, ExperimentSpec] = {}
         self._live_trials: dict[str, optuna.trial.Trial] = {}
 
-    def open_or_resume_experiment(
-        self, spec: ExperimentSpec, settings: dict[str, Any]
-    ) -> StudyHandle:
-        study_name = self._resolve_study_name(settings)
+    def open_or_resume_experiment(self, spec: ExperimentSpec) -> StudyHandle:
+        study_name = self._resolve_study_name(spec)
         direction_str: str = spec.objective_config.get("direction", "minimize")
         direction = (
             optuna.study.StudyDirection.MAXIMIZE
@@ -56,8 +54,8 @@ class OptunaBackendAdapter:
             else optuna.study.StudyDirection.MINIMIZE
         )
 
-        sampler = self._build_sampler(settings)
-        pruner = self._build_pruner(settings)
+        sampler = self._build_sampler(spec)
+        pruner = self._build_pruner(spec)
 
         study = optuna.create_study(
             study_name=study_name,
@@ -96,7 +94,7 @@ class OptunaBackendAdapter:
             name=study_name,
             spec_hash=spec.spec_hash,
             direction=direction_str,
-            settings=settings,
+            settings=self._extract_study_settings(spec, study_name),
         )
 
     def get_spec(self, study_id: str) -> ExperimentSpec:
@@ -270,13 +268,13 @@ class OptunaBackendAdapter:
                 return trial
         return None
 
-    def _resolve_study_name(self, settings: dict[str, Any]) -> str:
-        name: str = settings.get("study_name", "default_study")
-        return f"{self._study_name_prefix}{name}"
+    def _resolve_study_name(self, spec: ExperimentSpec) -> str:
+        short_hash = spec.spec_hash.replace("sha256:", "")[:16]
+        return f"{self._study_name_prefix}{spec.spec_id}-{short_hash}"
 
     @staticmethod
-    def _build_sampler(settings: dict[str, Any]) -> optuna.samplers.BaseSampler:
-        sampler_cfg = settings.get("sampler", {})
+    def _build_sampler(spec: ExperimentSpec) -> optuna.samplers.BaseSampler:
+        sampler_cfg = spec.objective_config.get("sampler", {})
         sampler_type = sampler_cfg.get("type", "tpe")
         seed = sampler_cfg.get("seed")
 
@@ -292,8 +290,8 @@ class OptunaBackendAdapter:
         )
 
     @staticmethod
-    def _build_pruner(settings: dict[str, Any]) -> optuna.pruners.BasePruner:
-        pruner_cfg = settings.get("pruner", {})
+    def _build_pruner(spec: ExperimentSpec) -> optuna.pruners.BasePruner:
+        pruner_cfg = spec.objective_config.get("pruner", {})
         pruner_type = pruner_cfg.get("type", "median")
 
         if pruner_type == "median":
@@ -303,3 +301,17 @@ class OptunaBackendAdapter:
             )
 
         return optuna.pruners.NopPruner()
+
+    @staticmethod
+    def _extract_study_settings(
+        spec: ExperimentSpec,
+        study_name: str,
+    ) -> dict[str, Any]:
+        settings: dict[str, Any] = {"study_name": study_name}
+        sampler_cfg = spec.objective_config.get("sampler")
+        pruner_cfg = spec.objective_config.get("pruner")
+        if isinstance(sampler_cfg, dict):
+            settings["sampler"] = dict(sampler_cfg)
+        if isinstance(pruner_cfg, dict):
+            settings["pruner"] = dict(pruner_cfg)
+        return settings

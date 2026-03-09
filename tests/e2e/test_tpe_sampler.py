@@ -81,7 +81,14 @@ class TestTPESamplerE2E:
         )
 
         spec_meta = {"dataset_version": "ds_v1", "engine_version": "e_v1"}
-        obj_cfg = {"name": "test_loss", "version": "v1", "direction": "minimize", "params": {}}
+        obj_cfg = {
+            "name": "test_loss",
+            "version": "v1",
+            "direction": "minimize",
+            "params": {},
+            "sampler": {"type": "tpe", "n_startup_trials": 5, "constant_liar": True, "seed": 42},
+            "pruner": {"type": "nop"},
+        }
         exec_cfg = {"executor_kind": "backtest", "default_resources": {"cpu": 1}}
         spec = ExperimentSpec(
             spec_id="e2e_tpe",
@@ -92,6 +99,10 @@ class TestTPESamplerE2E:
         )
 
         settings = make_settings(
+            spec_id="e2e_tpe",
+            meta=spec_meta,
+            objective_config=obj_cfg,
+            execution_config=exec_cfg,
             sampler={"type": "tpe", "n_startup_trials": 5, "constant_liar": True, "seed": 42},
             stop={"max_trials": 15},
             parallelism={"max_in_flight_trials": 4},
