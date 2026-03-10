@@ -11,6 +11,12 @@ from optimization_control_plane.domain.models import ExecutionRequest, RunResult
 _BACKTESTSYS_KIND = "backtestsys"
 _REPLAY_STRATEGY_NAME = "ReplayStrategy_Impl"
 _PATH_LOCK = Lock()
+_RESULT_FIELDS = {
+    "orderinfo_rows": ("OrderId", "SentTime", "Volume"),
+    "doneinfo_rows": ("OrderId", "DoneTime"),
+    "executiondetail_rows": ("OrderId", "RecvTick", "ExchTick", "Volume"),
+    "cancelrequest_rows": ("OrderId", "CancelSentTime"),
+}
 
 
 @dataclass(frozen=True)
@@ -57,6 +63,7 @@ class BackTestSysRunner:
             "run_key": request.run_key,
             "request_id": request.request_id,
             "strategy_name": run_cfg.strategy_name,
+            "result": self._build_result_diagnostics(raw_result),
         }
         return RunResult(metrics=metrics, diagnostics=diagnostics, artifact_refs=[])
 
@@ -144,3 +151,45 @@ class BackTestSysRunner:
         metrics["final_cash"] = float(portfolio.cash)
         metrics["final_position"] = int(portfolio.position)
         metrics["final_realized_pnl"] = float(portfolio.realized_pnl)
+
+    @staticmethod
+    def _build_result_diagnostics(raw_result: object) -> dict[str, list[dict[str, Any]]]:
+        return {
+            "orderinfo_rows": BackTestSysRunner._rows_to_dicts(
+                getattr(raw_result, "OrderInfo", ()),
+                _RESULT_FIELDS["orderinfo_rows"],
+            ),
+            "doneinfo_rows": BackTestSysRunner._rows_to_dicts(
+                getattr(raw_result, "DoneInfo", ()),
+                _RESULT_FIELDS["doneinfo_rows"],
+            ),
+            "executiondetail_rows": BackTestSysRunner._rows_to_dicts(
+                getattr(raw_result, "ExecutionDetail", ()),
+                _RESULT_FIELDS["executiondetail_rows"],
+            ),
+            "cancelrequest_rows": BackTestSysRunner._rows_to_dicts(
+                getattr(raw_result, "CancelRequest", ()),
+                _RESULT_FIELDS["cancelrequest_rows"],
+            ),
+        }
+
+    @staticmethod
+    def _rows_to_dicts(rows: Any, prioritized_keys: tuple[str, ...]) -> list[dict[str, Any]]:
+        return [BackTestSysRunner._row_to_dict(row, prioritized_keys) for row in rows]
+
+    @staticmethod
+    def _row_to_dict(row: Any, prioritized_keys: tuple[str, ...]) -> dict[str, Any]:
+        if isinstance(row, dict):
+            values = dict(row)
+        elif hasattr(row, "__dict__"):
+            values = dict(vars(row))
+        else:
+            raise TypeError(f"backtest result row must be dict-like, got {type(row).__name__}")
+        output: dict[str, Any] = {}
+        for key in prioritized_keys:
+            if key in values:
+                output[key] = values[key]
+        for key, value in values.items():
+            if key not in output:
+                output[key] = value
+        return output
