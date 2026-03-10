@@ -1,0 +1,3 @@
+PartitionDay,RecvTick,ExchTick,OrderId,ContractId,Price,Volume,OrderDirection,MachineName
+20260310,100,100,1001,1,1.0,1,BUY,mock
+20260310,101,101,1002,1,1.1,1,SELL,mock

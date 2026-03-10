@@ -1,0 +1,146 @@
+from __future__ import annotations
+
+import importlib
+import sys
+from dataclasses import dataclass
+from threading import Lock
+from typing import Any
+
+from optimization_control_plane.domain.models import ExecutionRequest, RunResult
+
+_BACKTESTSYS_KIND = "backtestsys"
+_REPLAY_STRATEGY_NAME = "ReplayStrategy_Impl"
+_PATH_LOCK = Lock()
+
+
+@dataclass(frozen=True)
+class BackTestSysRunConfig:
+    repo_root: str
+    base_config_path: str
+    strategy_name: str
+    replay_order_file: str
+    replay_cancel_file: str
+    overrides: dict[str, Any]
+
+
+class BackTestSysRunner:
+    """Bridge RunSpec to BackTestSys app.run() and convert to RunResult."""
+
+    def run_request(self, request: ExecutionRequest) -> RunResult:
+        run_cfg = self._parse_request(request)
+        self._ensure_repo_on_sys_path(run_cfg.repo_root)
+        runtime = self._load_runtime_modules()
+        config = runtime["load_config"](run_cfg.base_config_path)
+        self._apply_overrides(config, run_cfg.overrides)
+        runtime_cfg = runtime["BacktestConfigFactory"]().create(config)
+        runtime_cfg.strategy = runtime["ReplayStrategy_Impl"](
+            name=run_cfg.strategy_name,
+            order_file=run_cfg.replay_order_file,
+            cancel_file=run_cfg.replay_cancel_file,
+        )
+        app = runtime["BacktestApp"](runtime_cfg)
+        raw_result = app.run()
+        done_count = len(raw_result.DoneInfo)
+        execution_count = len(raw_result.ExecutionDetail)
+        if done_count + execution_count == 0:
+            raise ValueError("backtest result is empty: DoneInfo and ExecutionDetail are both zero")
+        order_count = len(raw_result.OrderInfo)
+        cancel_count = len(raw_result.CancelRequest)
+        metrics = {
+            "doneinfo_count": done_count,
+            "executiondetail_count": execution_count,
+            "orderinfo_count": order_count,
+            "cancelrequest_count": cancel_count,
+        }
+        self._merge_portfolio_metrics(metrics, app.last_context)
+        diagnostics = {
+            "run_key": request.run_key,
+            "request_id": request.request_id,
+            "strategy_name": run_cfg.strategy_name,
+        }
+        return RunResult(metrics=metrics, diagnostics=diagnostics, artifact_refs=[])
+
+    @staticmethod
+    def _parse_request(request: ExecutionRequest) -> BackTestSysRunConfig:
+        if request.run_spec.kind != _BACKTESTSYS_KIND:
+            raise ValueError(f"run_spec.kind must be '{_BACKTESTSYS_KIND}', got '{request.run_spec.kind}'")
+        payload = request.run_spec.config
+        repo_root = BackTestSysRunner._read_required_string(payload, "repo_root")
+        base_config_path = BackTestSysRunner._read_required_string(payload, "base_config_path")
+        strategy = payload.get("strategy")
+        if not isinstance(strategy, dict):
+            raise ValueError("run_spec.config.strategy must be a dict")
+        strategy_name = BackTestSysRunner._read_required_string(strategy, "name")
+        if strategy_name != _REPLAY_STRATEGY_NAME:
+            raise ValueError(
+                f"BackTestSys runner requires '{_REPLAY_STRATEGY_NAME}', got '{strategy_name}'"
+            )
+        replay_order_file = BackTestSysRunner._read_required_string(strategy, "order_file")
+        replay_cancel_file = BackTestSysRunner._read_required_string(strategy, "cancel_file")
+        overrides = payload.get("overrides", {})
+        if not isinstance(overrides, dict):
+            raise ValueError("run_spec.config.overrides must be a dict")
+        return BackTestSysRunConfig(
+            repo_root=repo_root,
+            base_config_path=base_config_path,
+            strategy_name=strategy_name,
+            replay_order_file=replay_order_file,
+            replay_cancel_file=replay_cancel_file,
+            overrides=dict(overrides),
+        )
+
+    @staticmethod
+    def _read_required_string(payload: dict[str, Any], key: str) -> str:
+        value = payload.get(key)
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"run_spec.config.{key} must be a non-empty string")
+        return value
+
+    @staticmethod
+    def _ensure_repo_on_sys_path(repo_root: str) -> None:
+        with _PATH_LOCK:
+            if repo_root not in sys.path:
+                sys.path.insert(0, repo_root)
+
+    @staticmethod
+    def _load_runtime_modules() -> dict[str, Any]:
+        config_module = importlib.import_module("quant_framework.config")
+        factory_module = importlib.import_module("quant_framework.adapters.factory")
+        strategy_module = importlib.import_module("quant_framework.adapters.IStrategy")
+        core_module = importlib.import_module("quant_framework.core")
+        return {
+            "load_config": getattr(config_module, "load_config"),
+            "BacktestConfigFactory": getattr(factory_module, "BacktestConfigFactory"),
+            "ReplayStrategy_Impl": getattr(strategy_module, "ReplayStrategy_Impl"),
+            "BacktestApp": getattr(core_module, "BacktestApp"),
+        }
+
+    @staticmethod
+    def _apply_overrides(config: object, overrides: dict[str, Any]) -> None:
+        for key, value in overrides.items():
+            BackTestSysRunner._set_path_value(config, key, value)
+
+    @staticmethod
+    def _set_path_value(target: object, key_path: str, value: Any) -> None:
+        parts = key_path.split(".")
+        cursor = target
+        for part in parts[:-1]:
+            if not hasattr(cursor, part):
+                raise AttributeError(f"override path not found: {key_path}")
+            cursor = getattr(cursor, part)
+        leaf = parts[-1]
+        if not hasattr(cursor, leaf):
+            raise AttributeError(f"override path not found: {key_path}")
+        setattr(cursor, leaf, value)
+
+    @staticmethod
+    def _merge_portfolio_metrics(metrics: dict[str, Any], context: object | None) -> None:
+        if context is None:
+            return
+        oms = getattr(context, "oms", None)
+        portfolio = getattr(oms, "portfolio", None)
+        if portfolio is None:
+            return
+        metrics["final_cash"] = float(portfolio.cash)
+        metrics["final_position"] = int(portfolio.position)
+        metrics["final_realized_pnl"] = float(portfolio.realized_pnl)
