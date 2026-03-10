@@ -21,10 +21,17 @@ class FileResultStore:
         (self._base / _TRIAL_RESULTS_DIR).mkdir(parents=True, exist_ok=True)
         (self._base / _TRIAL_FAILURES_DIR).mkdir(parents=True, exist_ok=True)
 
-    def write_run_record(self, run_key: str, run_result: RunResult) -> None:
+    def write_run_record(
+        self,
+        run_key: str,
+        run_result: RunResult,
+        *,
+        target_id: str,
+    ) -> None:
         path = self._base / _RUN_RECORDS_DIR / _safe_filename(run_key)
         _atomic_write_json(path, {
             "run_key": run_key,
+            "target_id": target_id,
             "metrics": run_result.metrics,
             "diagnostics": run_result.diagnostics,
             "artifact_refs": run_result.artifact_refs,

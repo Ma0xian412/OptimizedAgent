@@ -71,7 +71,11 @@ def _handle_completed(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
     assert run_result is not None, "COMPLETED event must carry run_result"
 
     deps.run_cache.put(run_key, run_result)
-    deps.result_store.write_run_record(run_key, run_result)
+    deps.result_store.write_run_record(
+        run_key,
+        run_result,
+        target_id=deps.spec.target_spec.target_id,
+    )
 
     obj = deps.objective_def.objective_evaluator.evaluate(run_result, deps.spec)
     deps.objective_cache.put(entry.leader.objective_key, obj)

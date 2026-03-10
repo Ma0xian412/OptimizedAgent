@@ -131,6 +131,28 @@ class TestRunKeyStability:
         )
         assert builder.build(run_spec_1, spec) == builder.build(run_spec_2, spec)
 
+    def test_equivalent_target_config_order_same_key(self) -> None:
+        builder = StubRunKeyBuilder()
+        spec_a = make_spec(
+            target_spec={"target_id": "target_a", "config": {"venue": "paper", "market": "us"}}
+        )
+        spec_b = make_spec(
+            target_spec={"target_id": "target_a", "config": {"market": "us", "venue": "paper"}}
+        )
+        run_spec_a = RunSpec(
+            kind="test",
+            config={"x": 1.0},
+            resources={},
+            target_spec=spec_a.target_spec,
+        )
+        run_spec_b = RunSpec(
+            kind="test",
+            config={"x": 1.0},
+            resources={},
+            target_spec=spec_b.target_spec,
+        )
+        assert builder.build(run_spec_a, spec_a) == builder.build(run_spec_b, spec_b)
+
 
 class TestObjectiveKeyStability:
     def test_deterministic(self) -> None:
@@ -152,3 +174,9 @@ class TestObjectiveKeyStability:
         k1 = builder.build("run:abc", {"name": "loss", "version": "v1", "params": {}})
         k2 = builder.build("run:abc", {"name": "loss", "version": "v2", "params": {}})
         assert k1 != k2
+
+    def test_equivalent_params_order_same_key(self) -> None:
+        builder = StubObjectiveKeyBuilder()
+        cfg_1 = {"name": "loss", "version": "v1", "params": {"beta": 2, "alpha": 1}}
+        cfg_2 = {"name": "loss", "version": "v1", "params": {"alpha": 1, "beta": 2}}
+        assert builder.build("run:abc", cfg_1) == builder.build("run:abc", cfg_2)
