@@ -39,6 +39,7 @@ from optimization_control_plane.domain.state import ResourceState, StudyRuntimeS
 from optimization_control_plane.ports.cache import ObjectiveCache, RunCache
 from optimization_control_plane.ports.execution_backend import ExecutionBackend
 from optimization_control_plane.ports.optimizer_backend import OptimizerBackend
+from optimization_control_plane.ports.objective import BaseLossAwareEvaluator
 from optimization_control_plane.ports.policies import DispatchPolicy, ParallelismPolicy
 from optimization_control_plane.ports.result_store import ResultStore
 
@@ -112,6 +113,7 @@ class TrialOrchestrator:
         self._dataset_plan = build_dataset_plan(resolved_settings)
         if self._dataset_plan is not None and self._objective_def.trial_loss_aggregator is None:
             raise ValueError("trial_loss_aggregator is required when dataset_plan is enabled")
+        self._initialize_base_loss()
 
         logger.info(
             "orchestrator started",
@@ -433,6 +435,29 @@ class TrialOrchestrator:
         )
 
     def _build_final_test_request(self, run_spec: RunSpec) -> ExecutionRequest:
+        return self._build_tagged_request(
+            run_spec=run_spec,
+            request_prefix="final",
+            trial_prefix="final_test",
+            cohort_id="final_test",
+        )
+
+    def _build_baseline_request(self, run_spec: RunSpec) -> ExecutionRequest:
+        return self._build_tagged_request(
+            run_spec=run_spec,
+            request_prefix="baseline",
+            trial_prefix="baseline",
+            cohort_id="baseline",
+        )
+
+    def _build_tagged_request(
+        self,
+        *,
+        run_spec: RunSpec,
+        request_prefix: str,
+        trial_prefix: str,
+        cohort_id: str,
+    ) -> ExecutionRequest:
         assert self._spec is not None
         run_key = self._objective_def.run_key_builder.build(run_spec, self._spec)
         objective_key = self._objective_def.objective_key_builder.build(
@@ -440,11 +465,55 @@ class TrialOrchestrator:
             self._spec.objective_config,
         )
         return ExecutionRequest(
-            request_id=f"final_{uuid4().hex[:12]}",
-            trial_id=f"final_test_{uuid4().hex[:8]}",
+            request_id=f"{request_prefix}_{uuid4().hex[:12]}",
+            trial_id=f"{trial_prefix}_{uuid4().hex[:8]}",
             run_key=run_key,
             objective_key=objective_key,
-            cohort_id="final_test",
+            cohort_id=cohort_id,
             priority=0,
             run_spec=run_spec,
+        )
+
+    def _initialize_base_loss(self) -> None:
+        if self._dataset_plan is None:
+            return
+        if self._spec is None:
+            return
+        evaluator = self._objective_def.objective_evaluator
+        if not isinstance(evaluator, BaseLossAwareEvaluator):
+            return
+        aggregator = self._objective_def.trial_loss_aggregator
+        if aggregator is None:
+            raise ValueError("trial_loss_aggregator is required for baseline initialization")
+        base_run_spec = self._objective_def.run_spec_builder.build({}, self._spec)
+        handles = []
+        for shard in self._dataset_plan.all_shards():
+            run_spec = with_dataset_path(base_run_spec, shard)
+            handles.append(self._execution_backend.submit(self._build_baseline_request(run_spec)))
+        objectives = []
+        pending = list(handles)
+        while pending:
+            event = self._execution_backend.wait_any(pending, timeout=_EVENT_LOOP_TIMEOUT)
+            if event is None:
+                continue
+            pending = [handle for handle in pending if handle.handle_id != event.handle_id]
+            if event.kind != EventKind.COMPLETED or event.run_result is None:
+                raise RuntimeError(
+                    f"baseline run failed before optimisation loop: "
+                    f"event_kind={event.kind.value}, handle_id={event.handle_id}"
+                )
+            objectives.append(self._objective_def.objective_evaluator.evaluate(event.run_result, self._spec))
+        if not objectives:
+            raise RuntimeError("baseline run produced no completed sub-runs")
+        baseline = aggregator.aggregate(objectives, self._spec, split="baseline_all")
+        evaluator.set_base_loss(
+            baseline.value,
+            attrs={
+                "base_split": "all",
+                "base_run_count": len(objectives),
+            },
+        )
+        logger.info(
+            "baseline loss initialized",
+            extra={"base_loss": baseline.value, "base_run_count": len(objectives)},
         )

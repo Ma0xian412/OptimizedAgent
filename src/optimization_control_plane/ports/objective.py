@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from optimization_control_plane.domain.models import (
     Checkpoint,
@@ -50,3 +50,8 @@ class TrialLossAggregator(Protocol):
         spec: ExperimentSpec,
         split: str,
     ) -> ObjectiveResult: ...
+
+
+@runtime_checkable
+class BaseLossAwareEvaluator(Protocol):
+    def set_base_loss(self, loss: float, attrs: dict[str, Any] | None = None) -> None: ...

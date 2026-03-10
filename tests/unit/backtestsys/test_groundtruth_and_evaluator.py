@@ -44,6 +44,28 @@ def test_count_diff_evaluator_uses_gt_from_spec() -> None:
     assert objective.attrs["executiondetail_gap"] == 3
 
 
+def test_count_diff_evaluator_includes_base_loss_when_set() -> None:
+    gt_dir = Path(__file__).resolve().parents[2] / "fixtures" / "backtestsys_gt"
+    spec = make_spec(objective_config={
+        "name": "count_diff",
+        "version": "v1",
+        "direction": "minimize",
+        "params": {},
+        "groundtruth": {"dir": str(gt_dir)},
+    })
+    run_result = RunResult(
+        metrics={"doneinfo_count": 3, "executiondetail_count": 2},
+        diagnostics={},
+        artifact_refs=[],
+    )
+    evaluator = BackTestSysCountDiffEvaluator(groundtruth_adapter=BackTestSysGroundTruthAdapter())
+    evaluator.set_base_loss(7.5, attrs={"base_tag": "boot"})
+    objective = evaluator.evaluate(run_result, spec)
+    assert objective.value == 0.0
+    assert objective.attrs["base_loss"] == 7.5
+    assert objective.attrs["base_tag"] == "boot"
+
+
 def test_count_diff_evaluator_requires_metrics(tmp_path: Path) -> None:
     (tmp_path / "doneinfo.csv").write_text("h1\nv1\n", encoding="utf-8")
     (tmp_path / "excutiondetail.csv").write_text("h1\nv1\n", encoding="utf-8")

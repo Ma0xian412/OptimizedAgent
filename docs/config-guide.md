@@ -1,6 +1,7 @@
 # BackTestSys 优化配置说明（`config.xml`）
 
 本文对应当前实现：`core` 已支持“一个 trial 对 train 全文件 fan-out 运行并聚合 loss”，并在优化结束后生成 **test-only final report**（不参与 `tell`）。
+另外在正式迭代前，会先用 **base config** 在全部数据（train+test）上跑一轮，计算并写入 evaluator 的 `base_loss`。
 
 ---
 
@@ -170,6 +171,15 @@ core 调用 `TrialLossAggregator` 聚合一个 trial 的多个 run loss。
 当前 BackTestSys adapter 使用 `MeanTrialLossAggregator`（均值）：
 
 `trial_loss = mean(run_loss_1 ... run_loss_n)`
+
+### 9.3 baseline loss 初始化
+
+开始优化循环前，系统会执行 baseline 预跑：
+
+1. 用 base config（无采样参数）在 dataset_plan 的全部分片上运行。
+2. 对每个分片计算 run loss。
+3. 通过 `TrialLossAggregator` 聚合为一个 `base_loss`。
+4. 若 evaluator 实现了 `set_base_loss(loss, attrs)`，则保存该 `base_loss` 供后续评估使用。
 
 ---
 

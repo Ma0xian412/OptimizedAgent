@@ -25,6 +25,8 @@ class BackTestSysCountDiffEvaluator:
     ) -> None:
         self._groundtruth_adapter = groundtruth_adapter
         self._groundtruth_dir = groundtruth_dir
+        self._base_loss: float | None = None
+        self._base_attrs: dict[str, Any] = {}
 
     def evaluate(self, run_result: RunResult, spec: ExperimentSpec) -> ObjectiveResult:
         gt_dir = self._groundtruth_dir or self._resolve_groundtruth_dir(spec)
@@ -44,6 +46,9 @@ class BackTestSysCountDiffEvaluator:
             "doneinfo_gap": done_gap,
             "executiondetail_gap": execution_gap,
         }
+        if self._base_loss is not None:
+            attrs["base_loss"] = self._base_loss
+            attrs.update(self._base_attrs)
         return ObjectiveResult(
             value=loss,
             attrs=attrs,
@@ -68,3 +73,7 @@ class BackTestSysCountDiffEvaluator:
         if not isinstance(gt_dir, str) or not gt_dir:
             raise ValueError("spec.objective_config.groundtruth.dir must be a non-empty string")
         return gt_dir
+
+    def set_base_loss(self, loss: float, attrs: dict[str, Any] | None = None) -> None:
+        self._base_loss = float(loss)
+        self._base_attrs = dict(attrs or {})
