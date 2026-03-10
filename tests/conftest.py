@@ -147,3 +147,23 @@ class StubObjectiveEvaluator:
             attrs={"metric": self._metric},
             artifact_refs=list(run_result.artifact_refs),
         )
+
+
+class StubTargetResolver:
+    def __init__(
+        self,
+        resolved_target: ResolvedTarget | None = None,
+        *,
+        fail_with: Exception | None = None,
+    ) -> None:
+        self._resolved_target = resolved_target
+        self._fail_with = fail_with
+        self.calls: list[tuple[TargetSpec, ExperimentSpec]] = []
+
+    def resolve(self, target_spec: TargetSpec, spec: ExperimentSpec) -> ResolvedTarget:
+        self.calls.append((target_spec, spec))
+        if self._fail_with is not None:
+            raise self._fail_with
+        if self._resolved_target is not None:
+            return self._resolved_target
+        return ResolvedTarget.from_target_spec(target_spec)

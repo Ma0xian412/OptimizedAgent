@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 class EventHandlerDeps:
     study_id: str
     spec: ExperimentSpec
+    resolved_target_id: str
     profile: SamplerProfile
     objective_def: ObjectiveDefinition
     backend: OptimizerBackend
@@ -74,7 +75,7 @@ def _handle_completed(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
     deps.result_store.write_run_record(
         run_key,
         run_result,
-        target_id=deps.spec.target_spec.target_id,
+        target_id=deps.resolved_target_id,
     )
 
     obj = deps.objective_def.objective_evaluator.evaluate(run_result, deps.spec)
@@ -208,6 +209,7 @@ def _log_ctx(
         "trial_number": binding.trial_number,
         "run_key": run_key,
         "objective_key": binding.objective_key,
+        "target_id": deps.resolved_target_id,
         "handle_id": event.handle_id,
         "event_kind": event.kind.value,
         "sampling_mode": deps.profile.mode.value,

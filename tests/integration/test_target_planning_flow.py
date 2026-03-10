@@ -19,7 +19,7 @@ from optimization_control_plane.core.orchestration._metrics import Metrics
 from optimization_control_plane.core.orchestration._request_planner import _plan_and_fill
 from optimization_control_plane.core.orchestration.inflight_registry import InflightRegistry
 from optimization_control_plane.domain.enums import SamplingMode
-from optimization_control_plane.domain.models import SamplerProfile, TargetSpec
+from optimization_control_plane.domain.models import ResolvedTarget, SamplerProfile, TargetSpec
 from optimization_control_plane.domain.state import ResourceState, StudyRuntimeState
 from tests.conftest import (
     StubObjectiveEvaluator,
@@ -67,10 +67,15 @@ def test_plan_and_fill_submitted_request_keeps_target_spec(tmp_path: Any) -> Non
     )
     study = backend.open_or_resume_experiment(spec)
     profile = backend.get_sampler_profile(study.study_id)
+    resolved_target = ResolvedTarget(
+        target_id="resolved_gamma",
+        config={"market": "crypto", "region": "global"},
+    )
 
     _plan_and_fill(
         study_id=study.study_id,
         spec=spec,
+        resolved_target=resolved_target,
         profile=profile,
         objective_def=_build_objective_definition(),
         backend=backend,
@@ -92,25 +97,35 @@ def test_plan_and_fill_submitted_request_keeps_target_spec(tmp_path: Any) -> Non
 
     submitted = execution_backend.submitted_requests()
     assert len(submitted) == 1
-    assert submitted[0].run_spec.resolved_target.target_id == "target_gamma"
-    assert submitted[0].run_spec.resolved_target.config == {"market": "crypto"}
+    assert submitted[0].run_spec.resolved_target is resolved_target
+    assert submitted[0].run_spec.resolved_target.target_id == "resolved_gamma"
+    assert submitted[0].run_spec.resolved_target.config == {
+        "market": "crypto",
+        "region": "global",
+    }
+
+
+def _unsafe_resolved_target(target_id: Any, config: Any) -> Any:
+    target = object.__new__(ResolvedTarget)
+    object.__setattr__(target, "target_id", target_id)
+    object.__setattr__(target, "config", config)
+    return target
 
 
 @pytest.mark.parametrize(
-    ("target_spec", "error"),
+    ("resolved_target", "error"),
     [
-        (None, "spec.target_spec must be a TargetSpec"),
-        (_unsafe_target_spec("", {}), "spec.target_spec.target_id must be a non-empty string"),
-        (_unsafe_target_spec("target_x", "oops"), "spec.target_spec.config must be a dict"),
+        (None, "resolved_target must be a ResolvedTarget"),
+        (_unsafe_resolved_target("", {}), "resolved_target.target_id must be a non-empty string"),
+        (_unsafe_resolved_target("resolved_x", "oops"), "resolved_target.config must be a dict"),
     ],
 )
-def test_plan_and_fill_invalid_target_fails_before_ask_or_submit(
+def test_plan_and_fill_invalid_resolved_target_fails_before_ask_or_submit(
     tmp_path: Any,
-    target_spec: Any,
+    resolved_target: Any,
     error: str,
 ) -> None:
-    spec = make_spec()
-    object.__setattr__(spec, "target_spec", target_spec)
+    spec = make_spec(target_spec=_unsafe_target_spec("target_x", {}))
     backend = AskTrackingBackend()
     execution_backend = FakeExecutionBackend()
     metrics = Metrics()
@@ -126,6 +141,7 @@ def test_plan_and_fill_invalid_target_fails_before_ask_or_submit(
         _plan_and_fill(
             study_id="study_x",
             spec=spec,
+            resolved_target=resolved_target,
             profile=profile,
             objective_def=_build_objective_definition(),
             backend=backend,  # type: ignore[arg-type]

@@ -25,6 +25,7 @@ from tests.conftest import (
     StubRunKeyBuilder,
     StubRunSpecBuilder,
     StubSearchSpace,
+    StubTargetResolver,
     make_settings,
     make_spec,
 )
@@ -64,6 +65,7 @@ class TestDedup:
             progress_scorer=None,
             objective_evaluator=StubObjectiveEvaluator(),
         )
+        resolver = StubTargetResolver()
 
         orch = TrialOrchestrator(
             backend=backend,
@@ -74,6 +76,7 @@ class TestDedup:
             run_cache=FileRunCache(os.path.join(str(tmp_path), "data")),
             objective_cache=FileObjectiveCache(os.path.join(str(tmp_path), "data")),
             result_store=FileResultStore(os.path.join(str(tmp_path), "data")),
+            target_resolver=resolver,
         )
 
         spec = make_spec()
@@ -86,6 +89,7 @@ class TestDedup:
         m = orch.metrics.snapshot()
         assert m["execution_submitted_total"] == 1
         assert m["trials_completed_total"] == 5
+        assert len(resolver.calls) == 1
         records = _load_trial_results(str(tmp_path))
         assert any(record["attrs"].get("shared_run") is True for record in records)
 
@@ -113,6 +117,7 @@ class TestDedup:
             run_cache=FileRunCache(os.path.join(str(tmp_path), "data")),
             objective_cache=FileObjectiveCache(os.path.join(str(tmp_path), "data")),
             result_store=FileResultStore(os.path.join(str(tmp_path), "data")),
+            target_resolver=StubTargetResolver(),
         )
         spec = make_spec()
         settings = make_settings(stop={"max_trials": 5}, parallelism={"max_in_flight_trials": 3})

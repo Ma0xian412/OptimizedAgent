@@ -26,12 +26,18 @@ from tests.conftest import (
     StubRunKeyBuilder,
     StubRunSpecBuilder,
     StubSearchSpace,
+    StubTargetResolver,
     make_settings,
     make_spec,
 )
 
 
-def _build_orchestrator(tmp_path: str) -> TrialOrchestrator:
+def _build_orchestrator(
+    tmp_path: str,
+    *,
+    execution_backend: FakeExecutionBackend | None = None,
+    resolver: StubTargetResolver | None = None,
+) -> TrialOrchestrator:
     db = os.path.join(tmp_path, "test.db")
     return TrialOrchestrator(
         backend=OptunaBackendAdapter(storage_dsn=f"sqlite:///{db}"),
@@ -43,12 +49,13 @@ def _build_orchestrator(tmp_path: str) -> TrialOrchestrator:
             progress_scorer=None,
             objective_evaluator=StubObjectiveEvaluator(),
         ),
-        execution_backend=FakeExecutionBackend(),
+        execution_backend=execution_backend or FakeExecutionBackend(),
         parallelism_policy=AsyncFillParallelismPolicy(),
         dispatch_policy=SubmitNowDispatchPolicy(),
         run_cache=FileRunCache(os.path.join(tmp_path, "data")),
         objective_cache=FileObjectiveCache(os.path.join(tmp_path, "data")),
         result_store=FileResultStore(os.path.join(tmp_path, "data")),
+        target_resolver=resolver or StubTargetResolver(),
     )
 
 
@@ -144,3 +151,34 @@ def test_start_with_spec_rejects_invalid_target_spec(
 
     with pytest.raises(ValueError, match=error):
         orch.start(spec=spec)
+
+
+def test_start_calls_resolver_once_per_experiment(tmp_path: Any) -> None:
+    resolver = StubTargetResolver()
+    orch = _build_orchestrator(str(tmp_path), resolver=resolver)
+    spec = make_spec()
+    settings = make_settings(stop={"max_trials": 3}, parallelism={"max_in_flight_trials": 1})
+
+    orch.start(spec=spec, settings=settings)
+
+    assert len(resolver.calls) == 1
+
+
+def test_start_resolver_failure_fails_before_ask_or_submit(tmp_path: Any) -> None:
+    execution_backend = FakeExecutionBackend()
+    resolver = StubTargetResolver(fail_with=ValueError("cannot resolve target"))
+    orch = _build_orchestrator(
+        str(tmp_path),
+        execution_backend=execution_backend,
+        resolver=resolver,
+    )
+    spec = make_spec()
+    settings = make_settings(stop={"max_trials": 3}, parallelism={"max_in_flight_trials": 1})
+
+    with patch.object(orch._backend, "ask", wraps=orch._backend.ask) as ask_spy:  # type: ignore[attr-defined]
+        with pytest.raises(ValueError, match="cannot resolve target"):
+            orch.start(spec=spec, settings=settings)
+
+    assert len(resolver.calls) == 1
+    assert ask_spy.call_count == 0
+    assert execution_backend.submitted_requests() == []

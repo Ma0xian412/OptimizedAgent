@@ -26,6 +26,7 @@ from tests.conftest import (
     StubRunKeyBuilder,
     StubRunSpecBuilder,
     StubSearchSpace,
+    StubTargetResolver,
     make_settings,
     make_spec,
 )
@@ -67,6 +68,7 @@ def _make_orchestrator(
         run_cache=FileRunCache(os.path.join(tmp_path, "data")),
         objective_cache=FileObjectiveCache(os.path.join(tmp_path, "data")),
         result_store=FileResultStore(os.path.join(tmp_path, "data")),
+        target_resolver=StubTargetResolver(),
     )
     return orch, exec_be
 

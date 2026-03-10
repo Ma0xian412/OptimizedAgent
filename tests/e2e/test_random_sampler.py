@@ -28,7 +28,12 @@ from optimization_control_plane.domain.models import (
     stable_json_serialize,
 )
 from optimization_control_plane.ports.optimizer_backend import TrialContext
-from tests.conftest import StubObjectiveEvaluator, StubObjectiveKeyBuilder, make_settings
+from tests.conftest import (
+    StubObjectiveEvaluator,
+    StubObjectiveKeyBuilder,
+    StubTargetResolver,
+    make_settings,
+)
 
 
 class RandomSearchSpace:
@@ -97,6 +102,7 @@ class TestRandomSamplerE2E:
             run_cache=FileRunCache(os.path.join(str(tmp_path), "data")),
             objective_cache=FileObjectiveCache(os.path.join(str(tmp_path), "data")),
             result_store=FileResultStore(os.path.join(str(tmp_path), "data")),
+            target_resolver=StubTargetResolver(),
         )
 
         spec_meta = {"dataset_version": "ds_v1", "engine_version": "e_v1"}

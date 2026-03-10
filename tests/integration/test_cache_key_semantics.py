@@ -25,6 +25,7 @@ from tests.conftest import (
     StubRunKeyBuilder,
     StubRunSpecBuilder,
     StubSearchSpace,
+    StubTargetResolver,
     make_settings,
     make_spec,
 )
@@ -67,6 +68,7 @@ def _run_once(tmp: str, spec: ExperimentSpec, max_trials: int = 1) -> dict[str, 
         run_cache=FileRunCache(os.path.join(tmp, "data")),
         objective_cache=FileObjectiveCache(os.path.join(tmp, "data")),
         result_store=FileResultStore(os.path.join(tmp, "data")),
+        target_resolver=StubTargetResolver(),
     )
     orch.start(spec, _settings_for_spec(spec, max_trials=max_trials))
     return orch.metrics.snapshot()

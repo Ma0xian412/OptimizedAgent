@@ -24,6 +24,7 @@ from tests.conftest import (
     StubRunKeyBuilder,
     StubRunSpecBuilder,
     StubSearchSpace,
+    StubTargetResolver,
     make_settings,
     make_spec,
 )
@@ -75,6 +76,7 @@ class TestPruning:
             run_cache=FileRunCache(os.path.join(str(tmp_path), "data")),
             objective_cache=FileObjectiveCache(os.path.join(str(tmp_path), "data")),
             result_store=FileResultStore(os.path.join(str(tmp_path), "data")),
+            target_resolver=StubTargetResolver(),
         )
 
         spec = make_spec(objective_config={

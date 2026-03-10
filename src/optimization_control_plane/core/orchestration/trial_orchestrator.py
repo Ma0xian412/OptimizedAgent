@@ -20,10 +20,12 @@ from optimization_control_plane.core.orchestration.inflight_registry import (
 from optimization_control_plane.domain.models import (
     ExecutionEvent,
     ExperimentSpec,
+    ResolvedTarget,
     SamplerProfile,
     StudyHandle,
     TargetSpec,
     compute_spec_hash,
+    validate_resolved_target,
     validate_target_spec,
 )
 from optimization_control_plane.domain.state import ResourceState, StudyRuntimeState
@@ -32,6 +34,7 @@ from optimization_control_plane.ports.execution_backend import ExecutionBackend
 from optimization_control_plane.ports.optimizer_backend import OptimizerBackend
 from optimization_control_plane.ports.policies import DispatchPolicy, ParallelismPolicy
 from optimization_control_plane.ports.result_store import ResultStore
+from optimization_control_plane.ports.target_resolver import TargetResolver
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +59,7 @@ class TrialOrchestrator:
         run_cache: RunCache,
         objective_cache: ObjectiveCache,
         result_store: ResultStore,
+        target_resolver: TargetResolver,
     ) -> None:
         self._backend = backend
         self._objective_def = objective_def
@@ -65,9 +69,11 @@ class TrialOrchestrator:
         self._run_cache = run_cache
         self._objective_cache = objective_cache
         self._result_store = result_store
+        self._target_resolver = target_resolver
 
         self._study_handle: StudyHandle | None = None
         self._spec: ExperimentSpec | None = None
+        self._resolved_target: ResolvedTarget | None = None
         self._profile: SamplerProfile | None = None
         self._study_state = StudyRuntimeState()
         self._resource_state: ResourceState | None = None
@@ -102,6 +108,8 @@ class TrialOrchestrator:
 
         max_in_flight = resolved_settings.get("parallelism", {}).get("max_in_flight_trials", 1)
         self._reset_runtime_state(max_in_flight)
+        self._resolved_target = self._resolve_target(self._spec)
+        assert self._resolved_target is not None
 
         stop_cfg = resolved_settings.get("stop", {})
         self._max_trials = stop_cfg.get("max_trials")
@@ -112,7 +120,7 @@ class TrialOrchestrator:
             extra={
                 "study_id": self._study_handle.study_id,
                 "spec_hash": self._spec.spec_hash,
-                "target_id": self._spec.target_spec.target_id,
+                "target_id": self._resolved_target.target_id,
                 "sampling_mode": self._profile.mode.value,
                 "max_in_flight": max_in_flight,
             },
@@ -122,6 +130,7 @@ class TrialOrchestrator:
     def _run_loop(self) -> None:
         assert self._study_handle is not None
         assert self._spec is not None
+        assert self._resolved_target is not None
         assert self._profile is not None
         assert self._resource_state is not None
 
@@ -163,6 +172,7 @@ class TrialOrchestrator:
 
     def _plan_requests(self, study_id: str | None = None, target: int | None = None) -> None:
         assert self._spec is not None
+        assert self._resolved_target is not None
         assert self._profile is not None
         assert self._resource_state is not None
 
@@ -174,6 +184,7 @@ class TrialOrchestrator:
         _plan_and_fill(
             study_id=sid,
             spec=self._spec,
+            resolved_target=self._resolved_target,
             profile=self._profile,
             objective_def=self._objective_def,
             backend=self._backend,
@@ -195,12 +206,14 @@ class TrialOrchestrator:
 
     def _handle_event(self, event: ExecutionEvent) -> None:
         assert self._spec is not None
+        assert self._resolved_target is not None
         assert self._profile is not None
         assert self._study_handle is not None
 
         deps = EventHandlerDeps(
             study_id=self._study_handle.study_id,
             spec=self._spec,
+            resolved_target_id=self._resolved_target.target_id,
             profile=self._profile,
             objective_def=self._objective_def,
             backend=self._backend,
@@ -272,8 +285,14 @@ class TrialOrchestrator:
         )
         self._inflight = InflightRegistry()
         self._request_buffer = []
+        self._resolved_target = None
         self._stop_requested = False
         self._metrics = Metrics()
+
+    def _resolve_target(self, spec: ExperimentSpec) -> ResolvedTarget:
+        target_spec = validate_target_spec(spec.target_spec, source="spec.target_spec")
+        resolved_target = self._target_resolver.resolve(target_spec, spec)
+        return validate_resolved_target(resolved_target, source="resolved_target")
 
     def _resolve_start_spec(
         self,
