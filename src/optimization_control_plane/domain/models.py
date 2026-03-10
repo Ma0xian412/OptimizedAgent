@@ -62,7 +62,7 @@ class RunSpec:
     kind: str
     config: dict[str, Any]
     resources: dict[str, Any]
-    target_spec: TargetSpec | None = None
+    target_spec: TargetSpec
 
 
 @dataclass(frozen=True)

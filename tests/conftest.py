@@ -90,11 +90,17 @@ class StubSearchSpace:
 
 
 class StubRunSpecBuilder:
-    def build(self, params: dict[str, Any], spec: ExperimentSpec) -> RunSpec:
+    def build(
+        self,
+        target_spec: TargetSpec,
+        params: dict[str, Any],
+        execution_config: dict[str, Any],
+    ) -> RunSpec:
         return RunSpec(
             kind="test",
             config=dict(params),
-            resources=spec.execution_config.get("default_resources", {}),
+            resources=dict(execution_config.get("default_resources", {})),
+            target_spec=target_spec,
         )
 
 
@@ -103,6 +109,7 @@ class StubRunKeyBuilder:
         payload = stable_json_serialize({
             "kind": run_spec.kind,
             "config": run_spec.config,
+            "target_spec": run_spec.target_spec.to_dict(),
             "meta": spec.meta,
         })
         return "run:" + hashlib.sha256(payload.encode()).hexdigest()[:16]

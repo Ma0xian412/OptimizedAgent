@@ -63,7 +63,12 @@ class TestRunKeyStability:
     def test_deterministic(self) -> None:
         builder = StubRunKeyBuilder()
         spec = make_spec()
-        rs = RunSpec(kind="test", config={"x": 1.0}, resources={})
+        rs = RunSpec(
+            kind="test",
+            config={"x": 1.0},
+            resources={},
+            target_spec=spec.target_spec,
+        )
         k1 = builder.build(rs, spec)
         k2 = builder.build(rs, spec)
         assert k1 == k2
@@ -71,9 +76,60 @@ class TestRunKeyStability:
     def test_different_config_different_key(self) -> None:
         builder = StubRunKeyBuilder()
         spec = make_spec()
-        k1 = builder.build(RunSpec(kind="test", config={"x": 1.0}, resources={}), spec)
-        k2 = builder.build(RunSpec(kind="test", config={"x": 2.0}, resources={}), spec)
+        k1 = builder.build(
+            RunSpec(
+                kind="test",
+                config={"x": 1.0},
+                resources={},
+                target_spec=spec.target_spec,
+            ),
+            spec,
+        )
+        k2 = builder.build(
+            RunSpec(
+                kind="test",
+                config={"x": 2.0},
+                resources={},
+                target_spec=spec.target_spec,
+            ),
+            spec,
+        )
         assert k1 != k2
+
+    def test_same_params_different_target_different_key(self) -> None:
+        builder = StubRunKeyBuilder()
+        spec_a = make_spec(target_spec={"target_id": "target_a", "config": {"market": "us"}})
+        spec_b = make_spec(target_spec={"target_id": "target_b", "config": {"market": "us"}})
+        run_spec_a = RunSpec(
+            kind="test",
+            config={"x": 1.0},
+            resources={},
+            target_spec=spec_a.target_spec,
+        )
+        run_spec_b = RunSpec(
+            kind="test",
+            config={"x": 1.0},
+            resources={},
+            target_spec=spec_b.target_spec,
+        )
+        assert builder.build(run_spec_a, spec_a) != builder.build(run_spec_b, spec_b)
+
+    def test_same_params_same_target_same_key(self) -> None:
+        builder = StubRunKeyBuilder()
+        spec = make_spec(target_spec={"target_id": "target_a", "config": {"market": "us"}})
+        run_spec_1 = RunSpec(
+            kind="test",
+            config={"x": 1.0},
+            resources={},
+            target_spec=spec.target_spec,
+        )
+        run_spec_2 = RunSpec(
+            kind="test",
+            config={"x": 1.0},
+            resources={},
+            target_spec=spec.target_spec,
+        )
+        assert builder.build(run_spec_1, spec) == builder.build(run_spec_2, spec)
 
 
 class TestObjectiveKeyStability:

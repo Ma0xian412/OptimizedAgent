@@ -8,6 +8,7 @@ from optimization_control_plane.domain.models import (
     ObjectiveResult,
     RunResult,
     RunSpec,
+    TargetSpec,
 )
 from optimization_control_plane.ports.optimizer_backend import TrialContext
 
@@ -19,7 +20,12 @@ class SearchSpace(Protocol):
 
 @runtime_checkable
 class RunSpecBuilder(Protocol):
-    def build(self, params: dict[str, object], spec: ExperimentSpec) -> RunSpec: ...
+    def build(
+        self,
+        target_spec: TargetSpec,
+        params: dict[str, object],
+        execution_config: dict[str, object],
+    ) -> RunSpec: ...
 
 
 @runtime_checkable

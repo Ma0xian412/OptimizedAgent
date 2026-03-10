@@ -34,6 +34,7 @@ class FakeExecutionBackend:
         self._default_script: FakeRunScript | None = None
         self._pending_events: deque[ExecutionEvent] = deque()
         self._handles: dict[str, RunHandle] = {}
+        self._submitted_requests: dict[str, ExecutionRequest] = {}
         self._cancelled: set[str] = set()
 
     def set_script(self, run_key: str, script: FakeRunScript) -> None:
@@ -50,6 +51,7 @@ class FakeExecutionBackend:
             state="RUNNING",
         )
         self._handles[handle_id] = handle
+        self._submitted_requests[handle_id] = request
 
         script = self._scripts.get(request.run_key, self._default_script)
         if script is None:
@@ -82,6 +84,9 @@ class FakeExecutionBackend:
             handle_id=handle.handle_id,
             reason=reason,
         ))
+
+    def get_submitted_request(self, handle_id: str) -> ExecutionRequest:
+        return self._submitted_requests[handle_id]
 
     def _enqueue_events(self, handle_id: str, script: FakeRunScript) -> None:
         for cp in script.checkpoints:

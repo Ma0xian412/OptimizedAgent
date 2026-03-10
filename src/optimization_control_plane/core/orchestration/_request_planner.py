@@ -62,7 +62,9 @@ def _plan_and_fill(
         ctx = backend.open_trial_context(study_id, trial.trial_id)
 
         params = objective_def.search_space.sample(ctx, spec)
-        run_spec = objective_def.run_spec_builder.build(params, spec)
+        run_spec = objective_def.run_spec_builder.build(
+            spec.target_spec, params, spec.execution_config
+        )
         run_key = objective_def.run_key_builder.build(run_spec, spec)
         obj_key = objective_def.objective_key_builder.build(
             run_key, spec.objective_config

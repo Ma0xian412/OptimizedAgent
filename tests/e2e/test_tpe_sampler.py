@@ -37,13 +37,27 @@ class TPESearchSpace:
 
 
 class SimpleRunSpecBuilder:
-    def build(self, params: dict[str, Any], spec: ExperimentSpec) -> RunSpec:
-        return RunSpec(kind="backtest", config=dict(params), resources={})
+    def build(
+        self,
+        target_spec: TargetSpec,
+        params: dict[str, Any],
+        execution_config: dict[str, Any],
+    ) -> RunSpec:
+        return RunSpec(
+            kind="backtest",
+            config=dict(params),
+            resources=dict(execution_config.get("default_resources", {})),
+            target_spec=target_spec,
+        )
 
 
 class DeterministicRunKeyBuilder:
     def build(self, run_spec: RunSpec, spec: ExperimentSpec) -> str:
-        payload = stable_json_serialize({"config": run_spec.config, "meta": spec.meta})
+        payload = stable_json_serialize({
+            "config": run_spec.config,
+            "target_spec": run_spec.target_spec.to_dict(),
+            "meta": spec.meta,
+        })
         return "run:" + hashlib.sha256(payload.encode()).hexdigest()[:24]
 
 
