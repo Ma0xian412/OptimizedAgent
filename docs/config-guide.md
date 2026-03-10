@@ -22,6 +22,7 @@ python3 main.py --config /workspace/config.xml
 - `<dataset_plan>`：数据自动发现与 train:test 切分（9:1）
 - `<sampler>`：Optuna sampler
 - `<pruner>`：Optuna pruner（当前仅终态事件）
+- `<loss>`：loss 权重、归一化 eps
 - `<search_space>`：超参搜索空间
 - `<base_overrides>`：固定覆盖项
 
@@ -124,7 +125,54 @@ python3 main.py --config /workspace/config.xml
 
 ---
 
-## 7. search_space
+## 7. loss 配置
+
+```xml
+<loss>
+    <weights>
+        <curve>1.0</curve>
+        <terminal>1.0</terminal>
+        <cancel>1.0</cancel>
+        <post>1.0</post>
+    </weights>
+    <eps>
+        <curve>1e-12</curve>
+        <terminal>1e-12</terminal>
+        <cancel>1e-12</cancel>
+        <post>1e-12</post>
+    </eps>
+</loss>
+```
+
+支持组件：`curve` / `terminal` / `cancel` / `post`。
+
+### 7.1 权重字段（weights）
+
+- 路径：`loss.weights.<component>`
+- 含义：各 loss 组件在线性加权中的原始权重（要求 `>= 0`）。
+- 运行时仅对“可用组件”做重归一化：  
+  设可用集合为 `A`，原始权重为 `w_i`，则  
+  `w'_i = w_i / Σ_{j∈A}(w_j)`。
+- 若 `A` 中权重和为 0，会报错（`sum of available component weights must be > 0`）。
+
+### 7.2 eps 字段（eps）
+
+- 路径：`loss.eps.<component>`
+- 含义：baseline 归一化的分母平滑项（要求 `>= 0`）。
+- 对应组件归一化公式：`normalized_i = raw_i / (baseline_i + eps_i)`。
+
+### 7.3 baseline 归一化行为
+
+- 未初始化 baseline（无 `base_loss`）时：直接使用 `raw_components` 参与加权。
+- 已初始化 baseline（有 `base_loss`）时：
+  1. 若存在 `baseline_components`，优先按组件分母归一化：  
+     `baseline_i = baseline_components[i]`；
+  2. 否则回退使用统一分母：  
+     `baseline_i = base_loss`。
+
+---
+
+## 8. search_space
 
 ```xml
 <search_space>
@@ -138,7 +186,7 @@ python3 main.py --config /workspace/config.xml
 
 ---
 
-## 8. base_overrides
+## 9. base_overrides
 
 ```xml
 <base_overrides>
@@ -157,22 +205,22 @@ python3 main.py --config /workspace/config.xml
 
 ---
 
-## 9. loss 与聚合
+## 10. loss 与聚合
 
-### 9.1 单文件 loss（run loss）
+### 10.1 单文件 loss（run loss）
 
 当前 evaluator 定义：
 
 `|DoneInfo_count - GT_doneinfo_count| + |ExecutionDetail_count - GT_executiondetail_count|`
 
-### 9.2 trial 聚合 loss（port + adapter）
+### 10.2 trial 聚合 loss（port + adapter）
 
 core 调用 `TrialLossAggregator` 聚合一个 trial 的多个 run loss。  
 当前 BackTestSys adapter 使用 `MeanTrialLossAggregator`（均值）：
 
 `trial_loss = mean(run_loss_1 ... run_loss_n)`
 
-### 9.3 baseline loss 初始化
+### 10.3 baseline loss 初始化
 
 开始优化循环前，系统会执行 baseline 预跑：
 
@@ -183,7 +231,7 @@ core 调用 `TrialLossAggregator` 聚合一个 trial 的多个 run loss。
 
 ---
 
-## 10. test-only final report
+## 11. test-only final report
 
 - 优化结束后自动触发
 - 使用最佳 train trial 的超参
@@ -193,7 +241,7 @@ core 调用 `TrialLossAggregator` 聚合一个 trial 的多个 run loss。
 
 ---
 
-## 11. 最小示例
+## 12. 最小示例
 
 ```bash
 python3 main.py --config config.xml

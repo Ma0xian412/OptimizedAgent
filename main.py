@@ -34,6 +34,19 @@ from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrat
 from optimization_control_plane.domain.models import ExperimentSpec, compute_spec_hash
 
 _DEFAULT_CONFIG_PATH = "config.xml"
+_LOSS_COMPONENTS = ("curve", "terminal", "cancel", "post")
+_DEFAULT_LOSS_WEIGHTS = {
+    "curve": 1.0,
+    "terminal": 1.0,
+    "cancel": 1.0,
+    "post": 1.0,
+}
+_DEFAULT_LOSS_EPS = {
+    "curve": 1e-12,
+    "terminal": 1e-12,
+    "cancel": 1e-12,
+    "post": 1e-12,
+}
 
 
 @dataclass(frozen=True)
@@ -60,6 +73,8 @@ class AppConfig:
     train_ratio: int
     test_ratio: int
     dataset_seed: int
+    loss_weights: dict[str, float]
+    loss_eps: dict[str, float]
 
 
 def main() -> None:
@@ -91,6 +106,7 @@ def _load_config(config_path: str) -> AppConfig:
     search_params = _parse_search_params(root)
     base_overrides = _parse_base_overrides(root)
     dataset_files = _parse_dataset_files(root)
+    loss_weights, loss_eps = _parse_loss_config(root)
     fallback_order = _optional_text(root, "./paths/replay_order_file")
     fallback_cancel = _optional_text(root, "./paths/replay_cancel_file")
     replay_order_file = _resolve_replay_file(dataset_files, "order_file", fallback_order)
@@ -118,6 +134,8 @@ def _load_config(config_path: str) -> AppConfig:
         train_ratio=_as_int(_require_text(root, "./dataset_plan/train_ratio")),
         test_ratio=_as_int(_require_text(root, "./dataset_plan/test_ratio")),
         dataset_seed=_as_int(_require_text(root, "./dataset_plan/seed")),
+        loss_weights=loss_weights,
+        loss_eps=loss_eps,
     )
 
 
@@ -228,6 +246,39 @@ def _parse_pruner(root: ET.Element) -> dict[str, Any]:
     return pruner
 
 
+def _parse_loss_config(root: ET.Element) -> tuple[dict[str, float], dict[str, float]]:
+    weights = _parse_loss_component_map(
+        root=root,
+        parent_path="./loss/weights",
+        defaults=_DEFAULT_LOSS_WEIGHTS,
+        field_name="weights",
+    )
+    eps = _parse_loss_component_map(
+        root=root,
+        parent_path="./loss/eps",
+        defaults=_DEFAULT_LOSS_EPS,
+        field_name="eps",
+    )
+    return weights, eps
+
+
+def _parse_loss_component_map(
+    *,
+    root: ET.Element,
+    parent_path: str,
+    defaults: dict[str, float],
+    field_name: str,
+) -> dict[str, float]:
+    output: dict[str, float] = {}
+    for name in _LOSS_COMPONENTS:
+        text = _optional_text(root, f"{parent_path}/{name}")
+        value = defaults[name] if text is None else float(text)
+        if value < 0.0:
+            raise ValueError(f"loss.{field_name}.{name} must be >= 0, got {value}")
+        output[name] = value
+    return output
+
+
 def _build_spec(cfg: AppConfig) -> ExperimentSpec:
     meta = {"dataset_version": cfg.dataset_version, "engine_version": cfg.engine_version}
     objective_config = {
@@ -236,6 +287,8 @@ def _build_spec(cfg: AppConfig) -> ExperimentSpec:
         "direction": "minimize",
         "params": {},
         "groundtruth": {"dir": cfg.groundtruth_dir},
+        "weights": dict(cfg.loss_weights),
+        "eps": dict(cfg.loss_eps),
         "sampler": dict(cfg.sampler),
         "pruner": dict(cfg.pruner),
     }

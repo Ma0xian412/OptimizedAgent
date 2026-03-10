@@ -46,6 +46,21 @@
         <n_warmup_steps>1</n_warmup_steps>
     </pruner>
 
+    <loss>
+        <weights>
+            <curve>1.0</curve>
+            <terminal>1.0</terminal>
+            <cancel>1.0</cancel>
+            <post>1.0</post>
+        </weights>
+        <eps>
+            <curve>1e-12</curve>
+            <terminal>1e-12</terminal>
+            <cancel>1e-12</cancel>
+            <post>1e-12</post>
+        </eps>
+    </loss>
+
     <search_space>
         <param name="exchange.cancel_bias_k" type="float" low="0.0" high="0.3" />
         <param name="tape.epsilon" type="float" low="0.6" high="1.4" />
