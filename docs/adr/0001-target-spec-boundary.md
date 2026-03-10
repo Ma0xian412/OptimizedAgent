@@ -19,11 +19,11 @@
 3. `compute_spec_hash` 将 `target_spec` 纳入稳定序列化输入。
 4. `TrialOrchestrator` 在 `start(settings=...)` 构建 spec 时强制要求 `target_spec`；
    缺失即报错，不做 fallback，不从 `execution_config` 或 `objective_config` 猜测。
-5. `RunSpec` 仅预留可选 `target_spec` 字段，为后续执行链路全量迁移做准备。
+5. `RunSpec` 执行输入统一使用 `resolved_target`，不再携带 `target_spec`。
 
 ## 迁移策略
 
-- 采用 fail-fast：旧格式（无 `target_spec`）直接失败并暴露错误。
+- 采用 fail-fast：旧格式（无 `target_spec` 或把 target 塞进 `execution_config`）直接失败并暴露错误。
 - 调用方必须显式提供 `target_spec`，先完成领域模型和入口校验，再在后续迭代扩展到执行链路。
 
 ## 结果

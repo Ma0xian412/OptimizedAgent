@@ -46,6 +46,7 @@ _SPEC_SETTINGS_KEYS = (
     "objective_config",
     "execution_config",
 )
+_LEGACY_TARGET_KEYS = ("target", "target_spec")
 
 
 class TrialOrchestrator:
@@ -322,6 +323,11 @@ class TrialOrchestrator:
     def _build_spec_from_settings(self, settings: dict[str, Any]) -> ExperimentSpec:
         payload = self._read_spec_payload(settings)
         missing = [key for key in _SPEC_SETTINGS_KEYS if key not in payload]
+        legacy_target_keys = self._legacy_target_keys_in_execution_config(
+            payload.get("execution_config")
+        )
+        if "target_spec" in missing and legacy_target_keys:
+            self._raise_legacy_target_error(legacy_target_keys)
         if missing:
             raise ValueError(
                 "settings must include spec fields to construct ExperimentSpec: "
@@ -335,6 +341,9 @@ class TrialOrchestrator:
         target_spec = self._read_required_target_spec(payload)
         objective_config = self._augment_objective_config(payload, settings)
         execution_config = self._read_required_dict(payload, "execution_config")
+        legacy_target_keys = self._legacy_target_keys_in_execution_config(execution_config)
+        if legacy_target_keys:
+            self._raise_legacy_target_error(legacy_target_keys)
         computed_hash = compute_spec_hash(
             spec_id, meta, target_spec, objective_config, execution_config
         )
@@ -392,3 +401,22 @@ class TrialOrchestrator:
     @staticmethod
     def _validate_start_spec(spec: ExperimentSpec) -> None:
         validate_target_spec(spec.target_spec, source="spec.target_spec")
+        legacy_target_keys = TrialOrchestrator._legacy_target_keys_in_execution_config(
+            spec.execution_config
+        )
+        if legacy_target_keys:
+            TrialOrchestrator._raise_legacy_target_error(legacy_target_keys)
+
+    @staticmethod
+    def _legacy_target_keys_in_execution_config(value: Any) -> tuple[str, ...]:
+        if not isinstance(value, dict):
+            return ()
+        return tuple(sorted(key for key in _LEGACY_TARGET_KEYS if key in value))
+
+    @staticmethod
+    def _raise_legacy_target_error(keys: tuple[str, ...]) -> None:
+        rendered = ", ".join(f"execution_config.{key}" for key in keys)
+        raise ValueError(
+            "legacy target format is not supported: "
+            f"found {rendered}; use top-level target_spec only"
+        )

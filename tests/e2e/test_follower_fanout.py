@@ -148,3 +148,29 @@ class TestLeaderPrunedFollowerFanout:
         assert all(record["error"] == "PRUNED" for record in records)
         assert all(record["state"] == "PRUNED" for record in records)
         assert any(record["attrs"].get("shared_run") is True for record in records)
+
+
+class TestLeaderCancelledFollowerFanout:
+    def test_followers_inherit_fail_on_non_pruned_cancel(self, tmp_path: Any) -> None:
+        script = FakeRunScript(
+            final_event=EventKind.CANCELLED,
+            fail_reason="user_stop",
+        )
+        orch, _ = _make_orchestrator(str(tmp_path), script)
+
+        spec = make_spec()
+        settings = make_settings(
+            stop={"max_trials": 5, "max_failures": 5},
+            parallelism={"max_in_flight_trials": 5},
+        )
+
+        orch.start(spec, settings)
+
+        m = orch.metrics.snapshot()
+        assert m["trials_failed_total"] >= 1
+        assert m["execution_submitted_total"] >= 1
+        records = _load_records(str(tmp_path), "trial_failures")
+        assert len(records) == 5
+        assert all(record["error"] == "user_stop" for record in records)
+        assert all(record["state"] == "FAIL" for record in records)
+        assert any(record["attrs"].get("shared_run") is True for record in records)

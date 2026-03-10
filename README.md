@@ -13,7 +13,8 @@
 ## Fail-fast 约束
 
 - `TrialOrchestrator.start()` 会校验 `spec.target_spec`。
-- `FakeExecutionBackend.submit()` 会显式校验 `request.run_spec.target_spec`，缺失或非法直接报错。
+- `FakeExecutionBackend.submit()` 会显式校验 `request.run_spec.resolved_target`，缺失或非法直接报错。
+- 旧格式中把 target 藏在 `execution_config.target` / `execution_config.target_spec` 会直接报错，不做 fallback。
 - `OptunaBackendAdapter.open_or_resume_experiment()` 在 open/resume 时校验 target，并从持久化 `spec_json` 恢复 canonical spec；`target_spec` 缺失会报错而不是静默降级。
 
 ## 最小示例
@@ -31,6 +32,7 @@ from optimization_control_plane.adapters.storage import (
     FileResultStore,
     FileRunCache,
 )
+from optimization_control_plane.adapters.target_resolution import SimpleTargetResolver
 from optimization_control_plane.domain.models import (
     ExperimentSpec,
     RunResult,
@@ -69,6 +71,7 @@ orchestrator = TrialOrchestrator(
     run_cache=FileRunCache("data"),
     objective_cache=FileObjectiveCache("data"),
     result_store=FileResultStore("data"),
+    target_resolver=SimpleTargetResolver(),
 )
 
 settings = {

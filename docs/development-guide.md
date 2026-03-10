@@ -289,7 +289,7 @@ class SearchSpace {
 
 class RunSpecBuilder {
   <<interface>>
-  +build(target_spec, params, execution_config) RunSpec
+  +build(resolved_target, params, execution_config) RunSpec
 }
 
 class RunKeyBuilder {
@@ -325,7 +325,7 @@ class RunSpec {
   +string kind
   +map config
   +map resources
-  +TargetSpec target_spec
+  +ResolvedTarget resolved_target
 }
 
 class ExecutionRequest {
@@ -532,7 +532,7 @@ loop orchestration loop
 
     OR->>SS: sample(TC, spec)
     SS-->>OR: params
-    OR->>RB: build(spec.target_spec, params, spec.execution_config)
+    OR->>RB: build(resolved_target, params, spec.execution_config)
     RB-->>OR: RunSpec
     OR->>RK: build(run_spec, spec)
     RK-->>OR: run_key
@@ -700,7 +700,7 @@ end
 3. 每个 trial 都执行：
    - `open_trial_context()`
    - `SearchSpace.sample()`
-   - `RunSpecBuilder.build(spec.target_spec, params, spec.execution_config)`
+  - `RunSpecBuilder.build(resolved_target, params, spec.execution_config)`
    - `RunKeyBuilder.build()`
    - `ObjectiveKeyBuilder.build()`
 
@@ -942,13 +942,13 @@ class SearchSpace(Protocol):
 ```
 
 #### `RunSpecBuilder`
-负责把 `target_spec + params + execution_config` 变成 `RunSpec`。
+负责把 `resolved_target + params + execution_config` 变成 `RunSpec`。
 
 ```python
 class RunSpecBuilder(Protocol):
     def build(
         self,
-        target_spec: TargetSpec,
+        resolved_target: ResolvedTarget,
         params: dict[str, object],
         execution_config: dict[str, object],
     ) -> RunSpec: ...
@@ -1834,6 +1834,11 @@ class TargetSpec:
     config: dict
 
 @dataclass(frozen=True)
+class ResolvedTarget:
+    target_id: str
+    config: dict
+
+@dataclass(frozen=True)
 class StudyHandle:
     study_id: str
     name: str
@@ -1853,7 +1858,7 @@ class RunSpec:
     kind: str
     config: dict
     resources: dict
-    target_spec: TargetSpec
+    resolved_target: ResolvedTarget
 
 @dataclass(frozen=True)
 class Checkpoint:
@@ -1920,7 +1925,7 @@ class SearchSpace(Protocol):
 class RunSpecBuilder(Protocol):
     def build(
         self,
-        target_spec: TargetSpec,
+        resolved_target: ResolvedTarget,
         params: dict,
         execution_config: dict,
     ) -> RunSpec: ...
@@ -1966,6 +1971,7 @@ class ResultStore(Protocol):
 
 ```python
 def _run_loop():
+    resolved_target = target_resolver.resolve(spec.target_spec, spec)
     while not stop_requested:
         sync_runtime_state()
 
@@ -1979,7 +1985,7 @@ def _run_loop():
 
             params = objective_def.search_space.sample(ctx, spec)
             run_spec = objective_def.run_spec_builder.build(
-                spec.target_spec, params, spec.execution_config
+                resolved_target, params, spec.execution_config
             )
 
             run_key = objective_def.run_key_builder.build(run_spec, spec)

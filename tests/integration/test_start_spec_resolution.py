@@ -121,8 +121,42 @@ def test_start_does_not_accept_target_spec_in_execution_config(tmp_path: Any) ->
     execution_config["target_spec"] = target_spec
     settings["execution_config"] = execution_config
 
-    with pytest.raises(ValueError, match="missing=\\['target_spec'\\]"):
+    with pytest.raises(
+        ValueError,
+        match="legacy target format is not supported: found execution_config.target_spec",
+    ):
         orch.start(settings=settings)
+
+
+def test_start_rejects_legacy_target_in_execution_config_even_with_top_level_target(
+    tmp_path: Any,
+) -> None:
+    orch = _build_orchestrator(str(tmp_path))
+    settings = make_settings()
+    execution_config = dict(settings["execution_config"])
+    execution_config["target"] = {"kind": "package", "ref": "legacy_target"}
+    settings["execution_config"] = execution_config
+
+    with pytest.raises(
+        ValueError,
+        match="legacy target format is not supported: found execution_config.target",
+    ):
+        orch.start(settings=settings)
+
+
+def test_start_with_spec_rejects_legacy_target_in_execution_config(tmp_path: Any) -> None:
+    orch = _build_orchestrator(str(tmp_path))
+    spec = make_spec(execution_config={
+        "executor_kind": "backtest",
+        "default_resources": {"cpu": 1},
+        "target": {"kind": "project", "ref": "legacy_proj"},
+    })
+
+    with pytest.raises(
+        ValueError,
+        match="legacy target format is not supported: found execution_config.target",
+    ):
+        orch.start(spec=spec)
 
 
 def _unsafe_target_spec(target_id: Any, config: Any) -> Any:
