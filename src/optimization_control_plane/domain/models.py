@@ -9,10 +9,33 @@ from optimization_control_plane.domain.enums import EventKind, SamplingMode
 
 
 @dataclass(frozen=True)
+class TargetSpec:
+    target_id: str
+    config: dict[str, Any]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"target_id": self.target_id, "config": dict(self.config)}
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> TargetSpec:
+        target_id = payload.get("target_id")
+        if not isinstance(target_id, str) or not target_id:
+            raise ValueError("target_spec.target_id must be a non-empty string")
+        config = payload.get("config")
+        if not isinstance(config, dict):
+            raise ValueError("target_spec.config must be a dict")
+        return cls(target_id=target_id, config=dict(config))
+
+    def __hash__(self) -> int:
+        return hash((self.target_id, stable_json_serialize(self.config)))
+
+
+@dataclass(frozen=True)
 class ExperimentSpec:
     spec_id: str
     spec_hash: str
     meta: dict[str, Any]
+    target_spec: TargetSpec
     objective_config: dict[str, Any]
     execution_config: dict[str, Any]
 
@@ -39,6 +62,7 @@ class RunSpec:
     kind: str
     config: dict[str, Any]
     resources: dict[str, Any]
+    target_spec: TargetSpec | None = None
 
 
 @dataclass(frozen=True)
@@ -106,12 +130,14 @@ def stable_json_serialize(obj: Any) -> str:
 def compute_spec_hash(
     spec_id: str,
     meta: dict[str, Any],
+    target_spec: TargetSpec,
     objective_config: dict[str, Any],
     execution_config: dict[str, Any],
 ) -> str:
     payload = stable_json_serialize({
         "spec_id": spec_id,
         "meta": meta,
+        "target_spec": target_spec.to_dict(),
         "objective_config": objective_config,
         "execution_config": execution_config,
     })

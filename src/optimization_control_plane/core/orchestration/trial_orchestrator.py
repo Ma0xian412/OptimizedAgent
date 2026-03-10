@@ -22,6 +22,7 @@ from optimization_control_plane.domain.models import (
     ExperimentSpec,
     SamplerProfile,
     StudyHandle,
+    TargetSpec,
     compute_spec_hash,
 )
 from optimization_control_plane.domain.state import ResourceState, StudyRuntimeState
@@ -34,7 +35,13 @@ from optimization_control_plane.ports.result_store import ResultStore
 logger = logging.getLogger(__name__)
 
 _EVENT_LOOP_TIMEOUT = 1.0
-_SPEC_SETTINGS_KEYS = ("spec_id", "meta", "objective_config", "execution_config")
+_SPEC_SETTINGS_KEYS = (
+    "spec_id",
+    "meta",
+    "target_spec",
+    "objective_config",
+    "execution_config",
+)
 
 
 class TrialOrchestrator:
@@ -302,9 +309,12 @@ class TrialOrchestrator:
         if not isinstance(spec_id, str) or not spec_id:
             raise ValueError("settings spec_id must be a non-empty string")
         meta = self._read_required_dict(payload, "meta")
+        target_spec = self._read_required_target_spec(payload)
         objective_config = self._augment_objective_config(payload, settings)
         execution_config = self._read_required_dict(payload, "execution_config")
-        computed_hash = compute_spec_hash(spec_id, meta, objective_config, execution_config)
+        computed_hash = compute_spec_hash(
+            spec_id, meta, target_spec, objective_config, execution_config
+        )
         provided_hash = payload.get("spec_hash")
         if provided_hash is not None and provided_hash != computed_hash:
             raise ValueError(
@@ -316,6 +326,7 @@ class TrialOrchestrator:
             spec_id=spec_id,
             spec_hash=spec_hash,
             meta=meta,
+            target_spec=target_spec,
             objective_config=objective_config,
             execution_config=execution_config,
         )
@@ -333,6 +344,13 @@ class TrialOrchestrator:
         if not isinstance(value, dict):
             raise ValueError(f"settings {key} must be a dict")
         return dict(value)
+
+    @staticmethod
+    def _read_required_target_spec(payload: dict[str, Any]) -> TargetSpec:
+        value = payload.get("target_spec")
+        if not isinstance(value, dict):
+            raise ValueError("settings target_spec must be a dict")
+        return TargetSpec.from_dict(value)
 
     def _augment_objective_config(
         self,

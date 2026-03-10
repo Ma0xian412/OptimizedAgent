@@ -80,6 +80,7 @@ class OptunaBackendAdapter:
                 json.dumps({
                     "spec_id": spec.spec_id,
                     "meta": spec.meta,
+                    "target_spec": spec.target_spec.to_dict(),
                     "objective_config": spec.objective_config,
                     "execution_config": spec.execution_config,
                 }, sort_keys=True),

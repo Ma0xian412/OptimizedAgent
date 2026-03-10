@@ -21,6 +21,7 @@ from optimization_control_plane.domain.models import (
     ExperimentSpec,
     RunResult,
     RunSpec,
+    TargetSpec,
     compute_spec_hash,
     stable_json_serialize,
 )
@@ -92,10 +93,15 @@ class TestRandomSamplerE2E:
             "pruner": {"type": "nop"},
         }
         exec_cfg = {"executor_kind": "backtest", "default_resources": {"cpu": 1}}
+        target_spec = TargetSpec(
+            target_id="target_backtest_v1",
+            config={"market": "us_equity", "venue": "paper"},
+        )
         spec = ExperimentSpec(
             spec_id="e2e_random",
-            spec_hash=compute_spec_hash("e2e_random", spec_meta, obj_cfg, exec_cfg),
+            spec_hash=compute_spec_hash("e2e_random", spec_meta, target_spec, obj_cfg, exec_cfg),
             meta=spec_meta,
+            target_spec=target_spec,
             objective_config=obj_cfg,
             execution_config=exec_cfg,
         )

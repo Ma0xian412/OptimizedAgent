@@ -9,6 +9,7 @@ from optimization_control_plane.domain.models import (
     ObjectiveResult,
     RunResult,
     RunSpec,
+    TargetSpec,
     compute_spec_hash,
     stable_json_serialize,
 )
@@ -17,6 +18,10 @@ from optimization_control_plane.ports.optimizer_backend import TrialContext
 
 def make_spec(**overrides: Any) -> ExperimentSpec:
     meta = overrides.pop("meta", {"dataset_version": "ds_v1", "engine_version": "e_v1"})
+    target_spec = overrides.pop("target_spec", {
+        "target_id": "target_backtest_v1",
+        "config": {"market": "us_equity", "venue": "paper"},
+    })
     obj_cfg = overrides.pop("objective_config", {
         "name": "test_loss",
         "version": "v1",
@@ -30,11 +35,16 @@ def make_spec(**overrides: Any) -> ExperimentSpec:
         "default_resources": {"cpu": 1},
     })
     spec_id = overrides.pop("spec_id", "test_spec")
-    spec_hash = compute_spec_hash(spec_id, meta, obj_cfg, exec_cfg)
+    if isinstance(target_spec, TargetSpec):
+        normalized_target = target_spec
+    else:
+        normalized_target = TargetSpec.from_dict(target_spec)
+    spec_hash = compute_spec_hash(spec_id, meta, normalized_target, obj_cfg, exec_cfg)
     return ExperimentSpec(
         spec_id=spec_id,
         spec_hash=spec_hash,
         meta=meta,
+        target_spec=normalized_target,
         objective_config=obj_cfg,
         execution_config=exec_cfg,
     )
@@ -44,6 +54,10 @@ def make_settings(**overrides: Any) -> dict[str, Any]:
     base: dict[str, Any] = {
         "spec_id": "test_spec",
         "meta": {"dataset_version": "ds_v1", "engine_version": "e_v1"},
+        "target_spec": {
+            "target_id": "target_backtest_v1",
+            "config": {"market": "us_equity", "venue": "paper"},
+        },
         "objective_config": {
             "name": "test_loss",
             "version": "v1",

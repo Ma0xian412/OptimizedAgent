@@ -79,3 +79,39 @@ def test_start_rejects_mismatched_spec_and_settings(tmp_path: Any) -> None:
 
     with pytest.raises(ValueError, match="provided spec does not match"):
         orch.start(spec=spec, settings=settings)
+
+
+def test_start_with_settings_requires_target_spec(tmp_path: Any) -> None:
+    orch = _build_orchestrator(str(tmp_path))
+    settings = make_settings()
+    settings.pop("target_spec")
+
+    with pytest.raises(ValueError, match="missing=\\['target_spec'\\]"):
+        orch.start(settings=settings)
+
+
+def test_start_rejects_legacy_spec_payload_without_target_spec(tmp_path: Any) -> None:
+    orch = _build_orchestrator(str(tmp_path))
+    legacy = make_settings()
+    payload = {
+        "spec_id": legacy["spec_id"],
+        "meta": legacy["meta"],
+        "objective_config": legacy["objective_config"],
+        "execution_config": legacy["execution_config"],
+    }
+    settings = {"spec": payload}
+
+    with pytest.raises(ValueError, match="missing=\\['target_spec'\\]"):
+        orch.start(settings=settings)
+
+
+def test_start_does_not_accept_target_spec_in_execution_config(tmp_path: Any) -> None:
+    orch = _build_orchestrator(str(tmp_path))
+    settings = make_settings()
+    target_spec = settings.pop("target_spec")
+    execution_config = dict(settings["execution_config"])
+    execution_config["target_spec"] = target_spec
+    settings["execution_config"] = execution_config
+
+    with pytest.raises(ValueError, match="missing=\\['target_spec'\\]"):
+        orch.start(settings=settings)

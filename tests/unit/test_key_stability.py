@@ -1,7 +1,7 @@
 """UT-1/2/3: spec_hash, run_key, objective_key stability."""
 from __future__ import annotations
 
-from optimization_control_plane.domain.models import RunSpec, compute_spec_hash
+from optimization_control_plane.domain.models import RunSpec, TargetSpec, compute_spec_hash
 from tests.conftest import (
     StubObjectiveKeyBuilder,
     StubRunKeyBuilder,
@@ -11,19 +11,52 @@ from tests.conftest import (
 
 class TestSpecHash:
     def test_deterministic(self) -> None:
-        h1 = compute_spec_hash("s1", {"a": 1}, {"b": 2}, {"c": 3})
-        h2 = compute_spec_hash("s1", {"a": 1}, {"b": 2}, {"c": 3})
+        target = TargetSpec(target_id="target_a", config={"exchange": "A"})
+        h1 = compute_spec_hash("s1", {"a": 1}, target, {"b": 2}, {"c": 3})
+        h2 = compute_spec_hash("s1", {"a": 1}, target, {"b": 2}, {"c": 3})
         assert h1 == h2
 
-    def test_different_input_different_hash(self) -> None:
-        h1 = compute_spec_hash("s1", {"a": 1}, {"b": 2}, {"c": 3})
-        h2 = compute_spec_hash("s2", {"a": 1}, {"b": 2}, {"c": 3})
+    def test_changes_when_target_spec_changes(self) -> None:
+        h1 = compute_spec_hash(
+            "s1",
+            {"a": 1},
+            TargetSpec(target_id="target_a", config={"exchange": "A"}),
+            {"b": 2},
+            {"c": 3},
+        )
+        h2 = compute_spec_hash(
+            "s1",
+            {"a": 1},
+            TargetSpec(target_id="target_b", config={"exchange": "A"}),
+            {"b": 2},
+            {"c": 3},
+        )
         assert h1 != h2
 
-    def test_key_order_irrelevant(self) -> None:
-        h1 = compute_spec_hash("s1", {"b": 2, "a": 1}, {}, {})
-        h2 = compute_spec_hash("s1", {"a": 1, "b": 2}, {}, {})
+    def test_stable_when_target_spec_is_equivalent(self) -> None:
+        h1 = compute_spec_hash(
+            "s1",
+            {"a": 1},
+            TargetSpec(target_id="target_a", config={"b": 2, "a": 1}),
+            {"x": 1},
+            {"y": 1},
+        )
+        h2 = compute_spec_hash(
+            "s1",
+            {"a": 1},
+            TargetSpec(target_id="target_a", config={"a": 1, "b": 2}),
+            {"x": 1},
+            {"y": 1},
+        )
         assert h1 == h2
+
+    def test_changes_when_objective_or_execution_changes(self) -> None:
+        target = TargetSpec(target_id="target_a", config={"exchange": "A"})
+        baseline = compute_spec_hash("s1", {"a": 1}, target, {"b": 2}, {"c": 3})
+        changed_objective = compute_spec_hash("s1", {"a": 1}, target, {"b": 3}, {"c": 3})
+        changed_execution = compute_spec_hash("s1", {"a": 1}, target, {"b": 2}, {"c": 4})
+        assert baseline != changed_objective
+        assert baseline != changed_execution
 
 
 class TestRunKeyStability:
