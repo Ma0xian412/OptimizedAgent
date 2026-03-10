@@ -17,6 +17,7 @@ from optimization_control_plane.adapters.storage import (
 )
 from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrator
 from tests.conftest import (
+    StubGroundTruthProvider,
     StubObjectiveEvaluator,
     StubObjectiveKeyBuilder,
     StubRunKeyBuilder,
@@ -39,6 +40,7 @@ def _build_orchestrator(tmp_path: str) -> TrialOrchestrator:
             progress_scorer=None,
             objective_evaluator=StubObjectiveEvaluator(),
         ),
+        groundtruth_provider=StubGroundTruthProvider(),
         execution_backend=FakeExecutionBackend(),
         parallelism_policy=AsyncFillParallelismPolicy(),
         dispatch_policy=SubmitNowDispatchPolicy(),

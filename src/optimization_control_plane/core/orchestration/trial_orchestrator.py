@@ -20,6 +20,7 @@ from optimization_control_plane.core.orchestration.inflight_registry import (
 from optimization_control_plane.domain.models import (
     ExecutionEvent,
     ExperimentSpec,
+    GroundTruthData,
     SamplerProfile,
     StudyHandle,
     compute_spec_hash,
@@ -27,6 +28,7 @@ from optimization_control_plane.domain.models import (
 from optimization_control_plane.domain.state import ResourceState, StudyRuntimeState
 from optimization_control_plane.ports.cache import ObjectiveCache, RunCache
 from optimization_control_plane.ports.execution_backend import ExecutionBackend
+from optimization_control_plane.ports.groundtruth import GroundTruthProvider
 from optimization_control_plane.ports.optimizer_backend import OptimizerBackend
 from optimization_control_plane.ports.policies import DispatchPolicy, ParallelismPolicy
 from optimization_control_plane.ports.result_store import ResultStore
@@ -42,6 +44,7 @@ class TrialOrchestrator:
         self,
         backend: OptimizerBackend,
         objective_def: ObjectiveDefinition,
+        groundtruth_provider: GroundTruthProvider,
         execution_backend: ExecutionBackend,
         parallelism_policy: ParallelismPolicy,
         dispatch_policy: DispatchPolicy,
@@ -51,6 +54,7 @@ class TrialOrchestrator:
     ) -> None:
         self._backend = backend
         self._objective_def = objective_def
+        self._groundtruth_provider = groundtruth_provider
         self._execution_backend = execution_backend
         self._parallelism_policy = parallelism_policy
         self._dispatch_policy = dispatch_policy
@@ -60,6 +64,7 @@ class TrialOrchestrator:
 
         self._study_handle: StudyHandle | None = None
         self._spec: ExperimentSpec | None = None
+        self._groundtruth: GroundTruthData | None = None
         self._profile: SamplerProfile | None = None
         self._study_state = StudyRuntimeState()
         self._resource_state: ResourceState | None = None
@@ -88,6 +93,7 @@ class TrialOrchestrator:
 
         self._study_handle = self._backend.open_or_resume_experiment(resolved_spec)
         self._spec = self._backend.get_spec(self._study_handle.study_id)
+        self._groundtruth = self._load_groundtruth(self._spec)
         self._profile = self._backend.get_sampler_profile(self._study_handle.study_id)
 
         max_in_flight = resolved_settings.get("parallelism", {}).get("max_in_flight_trials", 1)
@@ -102,6 +108,7 @@ class TrialOrchestrator:
             extra={
                 "study_id": self._study_handle.study_id,
                 "spec_hash": self._spec.spec_hash,
+                "groundtruth_fingerprint": self._groundtruth.fingerprint,
                 "sampling_mode": self._profile.mode.value,
                 "max_in_flight": max_in_flight,
             },
@@ -111,6 +118,7 @@ class TrialOrchestrator:
     def _run_loop(self) -> None:
         assert self._study_handle is not None
         assert self._spec is not None
+        assert self._groundtruth is not None
         assert self._profile is not None
         assert self._resource_state is not None
 
@@ -152,6 +160,7 @@ class TrialOrchestrator:
 
     def _plan_requests(self, study_id: str | None = None, target: int | None = None) -> None:
         assert self._spec is not None
+        assert self._groundtruth is not None
         assert self._profile is not None
         assert self._resource_state is not None
 
@@ -163,6 +172,7 @@ class TrialOrchestrator:
         _plan_and_fill(
             study_id=sid,
             spec=self._spec,
+            groundtruth=self._groundtruth,
             profile=self._profile,
             objective_def=self._objective_def,
             backend=self._backend,
@@ -184,12 +194,14 @@ class TrialOrchestrator:
 
     def _handle_event(self, event: ExecutionEvent) -> None:
         assert self._spec is not None
+        assert self._groundtruth is not None
         assert self._profile is not None
         assert self._study_handle is not None
 
         deps = EventHandlerDeps(
             study_id=self._study_handle.study_id,
             spec=self._spec,
+            groundtruth=self._groundtruth,
             profile=self._profile,
             objective_def=self._objective_def,
             backend=self._backend,
@@ -263,6 +275,17 @@ class TrialOrchestrator:
         self._request_buffer = []
         self._stop_requested = False
         self._metrics = Metrics()
+
+    def _load_groundtruth(self, spec: ExperimentSpec) -> GroundTruthData:
+        groundtruth_cfg = spec.objective_config.get("groundtruth")
+        if not isinstance(groundtruth_cfg, dict):
+            raise ValueError("spec.objective_config.groundtruth must be a dict")
+        data = self._groundtruth_provider.load(spec)
+        if not isinstance(data, GroundTruthData):
+            raise TypeError("groundtruth provider must return GroundTruthData")
+        if not data.fingerprint:
+            raise ValueError("groundtruth fingerprint must be a non-empty string")
+        return data
 
     def _resolve_start_spec(
         self,

@@ -6,6 +6,7 @@ from typing import Any
 from optimization_control_plane.domain.models import (
     Checkpoint,
     ExperimentSpec,
+    GroundTruthData,
     ObjectiveResult,
     RunResult,
     RunSpec,
@@ -22,6 +23,7 @@ def make_spec(**overrides: Any) -> ExperimentSpec:
         "version": "v1",
         "direction": "minimize",
         "params": {},
+        "groundtruth": {"version": "gt_v1", "path": "/tmp/gt.json"},
         "sampler": {"type": "random", "seed": 42},
         "pruner": {"type": "nop"},
     })
@@ -49,6 +51,7 @@ def make_settings(**overrides: Any) -> dict[str, Any]:
             "version": "v1",
             "direction": "minimize",
             "params": {},
+            "groundtruth": {"version": "gt_v1", "path": "/tmp/gt.json"},
             "sampler": {"type": "random", "seed": 42},
             "pruner": {"type": "nop"},
         },
@@ -118,10 +121,25 @@ class StubObjectiveEvaluator:
     def __init__(self, metric_name: str = "metric_1") -> None:
         self._metric = metric_name
 
-    def evaluate(self, run_result: RunResult, spec: ExperimentSpec) -> ObjectiveResult:
+    def evaluate(
+        self,
+        run_result: RunResult,
+        spec: ExperimentSpec,
+        groundtruth: GroundTruthData,
+    ) -> ObjectiveResult:
         value = run_result.metrics.get(self._metric, 0.0)
         return ObjectiveResult(
             value=float(value),
-            attrs={"metric": self._metric},
+            attrs={"metric": self._metric, "groundtruth_fingerprint": groundtruth.fingerprint},
             artifact_refs=list(run_result.artifact_refs),
         )
+
+
+class StubGroundTruthProvider:
+    def load(self, spec: ExperimentSpec) -> GroundTruthData:
+        groundtruth = spec.objective_config.get("groundtruth")
+        if not isinstance(groundtruth, dict):
+            raise ValueError("spec.objective_config.groundtruth must be a dict")
+        payload = stable_json_serialize(groundtruth)
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        return GroundTruthData(payload=groundtruth, fingerprint=f"sha256:{digest}")

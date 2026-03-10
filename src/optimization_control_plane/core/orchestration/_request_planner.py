@@ -15,6 +15,7 @@ from optimization_control_plane.domain.enums import DispatchDecision, TrialState
 from optimization_control_plane.domain.models import (
     ExecutionRequest,
     ExperimentSpec,
+    GroundTruthData,
     SamplerProfile,
 )
 from optimization_control_plane.domain.state import ResourceState, StudyRuntimeState
@@ -33,6 +34,7 @@ def _plan_and_fill(
     *,
     study_id: str,
     spec: ExperimentSpec,
+    groundtruth: GroundTruthData,
     profile: SamplerProfile,
     objective_def: ObjectiveDefinition,
     backend: OptimizerBackend,
@@ -64,9 +66,10 @@ def _plan_and_fill(
         params = objective_def.search_space.sample(ctx, spec)
         run_spec = objective_def.run_spec_builder.build(params, spec)
         run_key = objective_def.run_key_builder.build(run_spec, spec)
-        obj_key = objective_def.objective_key_builder.build(
+        raw_obj_key = objective_def.objective_key_builder.build(
             run_key, spec.objective_config
         )
+        obj_key = _scope_objective_key(raw_obj_key, groundtruth.fingerprint)
 
         log_extra = _log_extra(study_id, trial.trial_id, trial.number, run_key, obj_key, profile)
 
@@ -83,7 +86,7 @@ def _plan_and_fill(
         run_result = run_cache.get(run_key)
         if run_result is not None:
             metrics.inc("run_cache_hit_total")
-            obj = objective_def.objective_evaluator.evaluate(run_result, spec)
+            obj = objective_def.objective_evaluator.evaluate(run_result, spec, groundtruth)
             objective_cache.put(obj_key, obj)
             result_store.write_trial_result(trial.trial_id, obj)
             backend.tell(study_id, trial.trial_id, TrialState.COMPLETE, obj.value, obj.attrs)
@@ -181,3 +184,7 @@ def _log_extra(
         "objective_key": objective_key,
         "sampling_mode": profile.mode.value,
     }
+
+
+def _scope_objective_key(raw_key: str, groundtruth_fingerprint: str) -> str:
+    return f"{raw_key}::gt={groundtruth_fingerprint}"

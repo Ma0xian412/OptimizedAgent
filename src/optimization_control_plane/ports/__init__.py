@@ -1,5 +1,6 @@
 from optimization_control_plane.ports.cache import ObjectiveCache, RunCache
 from optimization_control_plane.ports.execution_backend import ExecutionBackend
+from optimization_control_plane.ports.groundtruth import GroundTruthProvider
 from optimization_control_plane.ports.objective import (
     ObjectiveEvaluator,
     ObjectiveKeyBuilder,
@@ -18,6 +19,7 @@ from optimization_control_plane.ports.result_store import ResultStore
 __all__ = [
     "DispatchPolicy",
     "ExecutionBackend",
+    "GroundTruthProvider",
     "ObjectiveCache",
     "ObjectiveEvaluator",
     "ObjectiveKeyBuilder",

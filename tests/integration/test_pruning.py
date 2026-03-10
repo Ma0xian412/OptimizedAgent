@@ -19,6 +19,7 @@ from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrat
 from optimization_control_plane.domain.enums import EventKind
 from optimization_control_plane.domain.models import Checkpoint, RunResult
 from tests.conftest import (
+    StubGroundTruthProvider,
     StubObjectiveEvaluator,
     StubObjectiveKeyBuilder,
     StubRunKeyBuilder,
@@ -69,6 +70,7 @@ class TestPruning:
         orch = TrialOrchestrator(
             backend=backend,
             objective_def=obj_def,
+            groundtruth_provider=StubGroundTruthProvider(),
             execution_backend=exec_be,
             parallelism_policy=AsyncFillParallelismPolicy(),
             dispatch_policy=SubmitNowDispatchPolicy(),
@@ -82,6 +84,7 @@ class TestPruning:
             "version": "v1",
             "direction": "minimize",
             "params": {},
+            "groundtruth": {"version": "gt_v1", "path": "/tmp/gt.json"},
             "sampler": {"type": "random", "seed": 42},
             "pruner": {"type": "median", "n_startup_trials": 0, "n_warmup_steps": 0},
         })
