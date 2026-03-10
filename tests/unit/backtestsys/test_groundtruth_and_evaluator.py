@@ -39,11 +39,11 @@ def test_evaluator_computes_four_components_and_total_loss(tmp_path: Path) -> No
     evaluator = BackTestSysCountDiffEvaluator(groundtruth_adapter=BackTestSysGroundTruthAdapter())
     objective = evaluator.evaluate(run_result, spec)
     raw = objective.attrs["raw_components"]
-    assert raw["curve"] == pytest.approx(0.115)
+    assert raw["curve"] == pytest.approx(0.9)
     assert raw["terminal"] == pytest.approx(0.175)
     assert raw["cancel"] == pytest.approx(0.0)
     assert raw["post"] == pytest.approx(0.1)
-    assert objective.value == pytest.approx(0.0975)
+    assert objective.value == pytest.approx(0.29375)
     assert objective.attrs["weights_used"]["curve"] == pytest.approx(0.25)
     assert objective.attrs["order_count"] == 2
     assert objective.attrs["cancel_order_count"] == 1
@@ -74,11 +74,11 @@ def test_evaluator_uses_baseline_components_for_normalization(tmp_path: Path) ->
     )
     objective = evaluator.evaluate(_make_run_result(), spec)
     normalized = objective.attrs["normalized_components"]
-    assert normalized["curve"] == pytest.approx(0.5)
+    assert normalized["curve"] == pytest.approx(0.9 / 0.23)
     assert normalized["terminal"] == pytest.approx(0.5)
     assert normalized["cancel"] == pytest.approx(0.0)
     assert normalized["post"] == pytest.approx(0.5)
-    assert objective.value == pytest.approx(0.375)
+    assert objective.value == pytest.approx((0.9 / 0.23 + 0.5 + 0.0 + 0.5) / 4.0)
     assert objective.attrs["base_loss"] == 7.5
     assert objective.attrs["baseline_components_used"] is True
 

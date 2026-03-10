@@ -56,9 +56,7 @@ def compute_raw_components(
 def _curve_loss(profile: OrderProfile) -> float:
     end_time = max(profile.run_done_time, profile.gt_done_time, profile.sent_time)
     if end_time <= profile.sent_time:
-        run_ratio = _terminal_fill_ratio(profile.run_events, profile.quantity)
-        gt_ratio = _terminal_fill_ratio(profile.gt_events, profile.quantity)
-        return abs(run_ratio - gt_ratio)
+        return 0.0
     time_points = {profile.sent_time, end_time}
     time_points.update(event_time for event_time, _ in profile.run_events)
     time_points.update(event_time for event_time, _ in profile.gt_events)
@@ -74,7 +72,7 @@ def _curve_loss(profile: OrderProfile) -> float:
         run_cum, run_idx = _advance_cumulative(profile.run_events, run_idx, left, profile.quantity, run_cum)
         gt_cum, gt_idx = _advance_cumulative(profile.gt_events, gt_idx, left, profile.quantity, gt_cum)
         area += abs(run_cum - gt_cum) / profile.quantity * float(right - left)
-    return area / float(end_time - profile.sent_time)
+    return area
 
 
 def _advance_cumulative(
@@ -125,7 +123,7 @@ def _filled_volume_before(
 ) -> float:
     cumulative = 0.0
     for event_time, volume in events:
-        if event_time >= threshold_time:
+        if event_time > threshold_time:
             break
         cumulative = min(quantity, cumulative + volume)
     return cumulative
