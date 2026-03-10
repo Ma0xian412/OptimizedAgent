@@ -8,9 +8,17 @@ from optimization_control_plane.adapters.backtestsys.groundtruth_adapter import 
 from optimization_control_plane.adapters.backtestsys.objective_evaluator import (
     BackTestSysCountDiffEvaluator,
 )
+from optimization_control_plane.adapters.backtestsys.key_builders import (
+    BackTestSysObjectiveKeyBuilder,
+    BackTestSysRunKeyBuilder,
+)
 from optimization_control_plane.adapters.backtestsys.run_spec_builder import (
     BackTestSysRunSpecBuilder,
     BackTestSysRunSpecDefaults,
+)
+from optimization_control_plane.adapters.backtestsys.search_space import (
+    BackTestSysSearchSpace,
+    SearchParam,
 )
 
 __all__ = [
@@ -18,6 +26,10 @@ __all__ = [
     "BackTestSysExecutionBackend",
     "BackTestSysGroundTruth",
     "BackTestSysGroundTruthAdapter",
+    "BackTestSysObjectiveKeyBuilder",
+    "BackTestSysRunKeyBuilder",
     "BackTestSysRunSpecBuilder",
     "BackTestSysRunSpecDefaults",
+    "BackTestSysSearchSpace",
+    "SearchParam",
 ]

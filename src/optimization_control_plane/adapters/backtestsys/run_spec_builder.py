@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from optimization_control_plane.domain.models import ExperimentSpec, RunSpec
@@ -15,6 +15,7 @@ class BackTestSysRunSpecDefaults:
     base_config_path: str
     replay_order_file: str
     replay_cancel_file: str
+    base_overrides: dict[str, Any] = field(default_factory=dict)
 
 
 class BackTestSysRunSpecBuilder:
@@ -24,6 +25,8 @@ class BackTestSysRunSpecBuilder:
         self._defaults = defaults
 
     def build(self, params: dict[str, object], spec: ExperimentSpec) -> RunSpec:
+        merged_overrides = dict(self._defaults.base_overrides)
+        merged_overrides.update(dict(params))
         config: dict[str, Any] = {
             "repo_root": self._defaults.repo_root,
             "base_config_path": self._defaults.base_config_path,
@@ -32,7 +35,7 @@ class BackTestSysRunSpecBuilder:
                 "order_file": self._defaults.replay_order_file,
                 "cancel_file": self._defaults.replay_cancel_file,
             },
-            "overrides": dict(params),
+            "overrides": merged_overrides,
         }
         resources = spec.execution_config.get("default_resources", {})
         return RunSpec(kind=_BACKTESTSYS_KIND, config=config, resources=dict(resources))
