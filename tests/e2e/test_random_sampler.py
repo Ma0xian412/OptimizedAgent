@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from pathlib import Path
 from typing import Any
 
 from optimization_control_plane.adapters.execution import FakeExecutionBackend, FakeRunScript
@@ -135,3 +136,12 @@ class TestRandomSamplerE2E:
         m = orch.metrics.snapshot()
         assert m["trials_completed_total"] == 10
         assert m["trials_asked_total"] == 10
+        submitted = exec_be.submitted_requests()
+        assert submitted
+        assert all(
+            request.run_spec.target_spec.target_id == "target_backtest_v1"
+            for request in submitted
+        )
+
+        trial_result_files = list((Path(tmp_path) / "data" / "trial_results").glob("*.json"))
+        assert len(trial_result_files) == 10

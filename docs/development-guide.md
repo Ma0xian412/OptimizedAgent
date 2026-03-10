@@ -175,8 +175,14 @@ class ExperimentSpec {
   +string spec_id
   +string spec_hash
   +map meta
+  +TargetSpec target_spec
   +map objective_config
   +map execution_config
+}
+
+class TargetSpec {
+  +string target_id
+  +map config
 }
 
 class StudyHandle {
@@ -271,7 +277,7 @@ class SearchSpace {
 
 class RunSpecBuilder {
   <<interface>>
-  +build(params, spec) RunSpec
+  +build(target_spec, params, execution_config) RunSpec
 }
 
 class RunKeyBuilder {
@@ -307,6 +313,7 @@ class RunSpec {
   +string kind
   +map config
   +map resources
+  +TargetSpec target_spec
 }
 
 class ExecutionRequest {
@@ -385,7 +392,7 @@ class ObjectiveCache {
 
 class ResultStore {
   <<interface>>
-  +write_run_record(run_key, run_result)
+  +write_run_record(run_key, run_result, target_id)
   +write_trial_result(trial_id, objective_result)
   +write_trial_failure(trial_id, error)
 }
@@ -513,7 +520,7 @@ loop orchestration loop
 
     OR->>SS: sample(TC, spec)
     SS-->>OR: params
-    OR->>RB: build(params, spec)
+    OR->>RB: build(spec.target_spec, params, spec.execution_config)
     RB-->>OR: RunSpec
     OR->>RK: build(run_spec, spec)
     RK-->>OR: run_key
@@ -612,7 +619,7 @@ loop orchestration loop
 
   else event.kind = COMPLETED
     OR->>RC: put(run_key, run_result)
-    OR->>RS: write_run_record(run_key, run_result)
+    OR->>RS: write_run_record(run_key, run_result, target_id=spec.target_spec.target_id)
     OR->>OE: evaluate(run_result, spec)
     OE-->>OR: objective_result
     OR->>OC: put(objective_key, objective_result)
@@ -681,7 +688,7 @@ end
 3. 每个 trial 都执行：
    - `open_trial_context()`
    - `SearchSpace.sample()`
-   - `RunSpecBuilder.build()`
+   - `RunSpecBuilder.build(spec.target_spec, params, spec.execution_config)`
    - `RunKeyBuilder.build()`
    - `ObjectiveKeyBuilder.build()`
 
@@ -735,7 +742,7 @@ end
 
 ### `COMPLETED`
 - `RunCache.put(run_key, run_result)`
-- `ResultStore.write_run_record(run_key, run_result)`
+- `ResultStore.write_run_record(run_key, run_result, target_id)`
 - `ObjectiveEvaluator.evaluate(run_result, spec)`
 - `ObjectiveCache.put(objective_key, objective_result)`
 - 对 leader 与所有 followers：
@@ -923,11 +930,16 @@ class SearchSpace(Protocol):
 ```
 
 #### `RunSpecBuilder`
-负责把 `params + spec` 变成 `RunSpec`。
+负责把 `target_spec + params + execution_config` 变成 `RunSpec`。
 
 ```python
 class RunSpecBuilder(Protocol):
-    def build(self, params: dict, spec: ExperimentSpec) -> RunSpec: ...
+    def build(
+        self,
+        target_spec: TargetSpec,
+        params: dict[str, object],
+        execution_config: dict[str, object],
+    ) -> RunSpec: ...
 ```
 
 #### `RunKeyBuilder`
@@ -1057,7 +1069,13 @@ class InflightRegistry:
 
 ```python
 class ResultStore(Protocol):
-    def write_run_record(self, run_key: str, run_result: RunResult) -> None: ...
+    def write_run_record(
+        self,
+        run_key: str,
+        run_result: RunResult,
+        *,
+        target_id: str,
+    ) -> None: ...
     def write_trial_result(self, trial_id: str, objective_result: ObjectiveResult) -> None: ...
     def write_trial_failure(self, trial_id: str, error) -> None: ...
 ```
@@ -1086,6 +1104,13 @@ class ResultStore(Protocol):
     "search_space_version": "space_v3",
     "objective_version": "obj_v5"
   },
+  "target_spec": {
+    "target_id": "target_backtest_v1",
+    "config": {
+      "market": "us_equity",
+      "venue": "paper"
+    }
+  },
   "objective_config": {
     "name": "single_objective_loss",
     "version": "loss_v5",
@@ -1107,6 +1132,13 @@ class ResultStore(Protocol):
 ```json
 {
   "kind": "backtest_run",
+  "target_spec": {
+    "target_id": "target_backtest_v1",
+    "config": {
+      "market": "us_equity",
+      "venue": "paper"
+    }
+  },
   "config": {
     "param_a": 1.23,
     "param_b": 5
@@ -1780,8 +1812,14 @@ class ExperimentSpec:
     spec_id: str
     spec_hash: str
     meta: dict
+    target_spec: "TargetSpec"
     objective_config: dict
     execution_config: dict
+
+@dataclass(frozen=True)
+class TargetSpec:
+    target_id: str
+    config: dict
 
 @dataclass(frozen=True)
 class StudyHandle:
@@ -1803,6 +1841,7 @@ class RunSpec:
     kind: str
     config: dict
     resources: dict
+    target_spec: TargetSpec
 
 @dataclass(frozen=True)
 class Checkpoint:
@@ -1867,7 +1906,12 @@ class SearchSpace(Protocol):
     def sample(self, ctx: TrialContext, spec: ExperimentSpec) -> dict: ...
 
 class RunSpecBuilder(Protocol):
-    def build(self, params: dict, spec: ExperimentSpec) -> RunSpec: ...
+    def build(
+        self,
+        target_spec: TargetSpec,
+        params: dict,
+        execution_config: dict,
+    ) -> RunSpec: ...
 
 class RunKeyBuilder(Protocol):
     def build(self, run_spec: RunSpec, spec: ExperimentSpec) -> str: ...
@@ -1895,7 +1939,13 @@ class ObjectiveCache(Protocol):
     def put(self, objective_key: str, objective_result: ObjectiveResult) -> None: ...
 
 class ResultStore(Protocol):
-    def write_run_record(self, run_key: str, run_result: RunResult) -> None: ...
+    def write_run_record(
+        self,
+        run_key: str,
+        run_result: RunResult,
+        *,
+        target_id: str,
+    ) -> None: ...
     def write_trial_result(self, trial_id: str, objective_result: ObjectiveResult) -> None: ...
     def write_trial_failure(self, trial_id: str, error: Any) -> None: ...
 ```
@@ -1916,7 +1966,9 @@ def _run_loop():
             ctx = backend.open_trial_context(study_id, trial.trial_id)
 
             params = objective_def.search_space.sample(ctx, spec)
-            run_spec = objective_def.run_spec_builder.build(params, spec)
+            run_spec = objective_def.run_spec_builder.build(
+                spec.target_spec, params, spec.execution_config
+            )
 
             run_key = objective_def.run_key_builder.build(run_spec, spec)
             objective_key = objective_def.objective_key_builder.build(
@@ -2000,7 +2052,11 @@ def _run_loop():
 
         elif event.kind == "COMPLETED":
             run_cache.put(entry.run_key, event.run_result)
-            result_store.write_run_record(entry.run_key, event.run_result)
+            result_store.write_run_record(
+                entry.run_key,
+                event.run_result,
+                target_id=spec.target_spec.target_id,
+            )
 
             obj = objective_def.objective_evaluator.evaluate(event.run_result, spec)
             objective_cache.put(entry.leader.objective_key, obj)

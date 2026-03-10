@@ -12,6 +12,7 @@ from optimization_control_plane.domain.models import (
     ExecutionRequest,
     RunHandle,
     RunResult,
+    validate_target_spec,
 )
 
 
@@ -35,6 +36,7 @@ class FakeExecutionBackend:
         self._pending_events: deque[ExecutionEvent] = deque()
         self._handles: dict[str, RunHandle] = {}
         self._submitted_requests: dict[str, ExecutionRequest] = {}
+        self._submitted_targets: dict[str, str] = {}
         self._cancelled: set[str] = set()
 
     def set_script(self, run_key: str, script: FakeRunScript) -> None:
@@ -44,6 +46,12 @@ class FakeExecutionBackend:
         self._default_script = script
 
     def submit(self, request: ExecutionRequest) -> RunHandle:
+        if request.run_spec is None:
+            raise ValueError("request.run_spec must be provided")
+        target_spec = validate_target_spec(
+            request.run_spec.target_spec,
+            source="request.run_spec.target_spec",
+        )
         handle_id = f"fh_{uuid.uuid4().hex[:12]}"
         handle = RunHandle(
             handle_id=handle_id,
@@ -52,6 +60,7 @@ class FakeExecutionBackend:
         )
         self._handles[handle_id] = handle
         self._submitted_requests[handle_id] = request
+        self._submitted_targets[handle_id] = target_spec.target_id
 
         script = self._scripts.get(request.run_key, self._default_script)
         if script is None:
@@ -90,6 +99,9 @@ class FakeExecutionBackend:
 
     def submitted_requests(self) -> list[ExecutionRequest]:
         return list(self._submitted_requests.values())
+
+    def get_submitted_target_id(self, handle_id: str) -> str:
+        return self._submitted_targets[handle_id]
 
     def _enqueue_events(self, handle_id: str, script: FakeRunScript) -> None:
         for cp in script.checkpoints:

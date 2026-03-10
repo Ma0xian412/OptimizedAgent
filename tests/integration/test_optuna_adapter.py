@@ -1,6 +1,7 @@
 """IT-1: OptunaBackendAdapter ask/tell closed loop."""
 from __future__ import annotations
 
+import json
 import os
 
 import pytest
@@ -88,3 +89,60 @@ class TestOptunaAskTell:
 
         with pytest.raises(ValueError, match="conflicting tell state"):
             adapter.tell(handle.study_id, trial.trial_id, TrialState.PRUNED, None, {"k": "v"})
+
+    def test_study_user_attrs_spec_json_contains_target_spec(
+        self,
+        adapter: OptunaBackendAdapter,
+    ) -> None:
+        spec = make_spec(
+            target_spec={"target_id": "target_resume_a", "config": {"market": "us"}}
+        )
+        handle = adapter.open_or_resume_experiment(spec)
+        study = adapter._studies[handle.study_id]
+        spec_json = study.user_attrs["spec_json"]
+        payload = json.loads(spec_json)
+
+        assert payload["target_spec"] == spec.target_spec.to_dict()
+
+    def test_resume_keeps_target_spec_consistent_via_persisted_spec_json(
+        self,
+        tmp_path: object,
+    ) -> None:
+        db = os.path.join(str(tmp_path), "resume.db")
+        storage_dsn = f"sqlite:///{db}"
+
+        first = OptunaBackendAdapter(storage_dsn=storage_dsn)
+        spec = make_spec(
+            target_spec={"target_id": "target_resume_b", "config": {"market": "crypto"}}
+        )
+        first.open_or_resume_experiment(spec)
+
+        second = OptunaBackendAdapter(storage_dsn=storage_dsn)
+        resumed_handle = second.open_or_resume_experiment(spec)
+        resumed_spec = second.get_spec(resumed_handle.study_id)
+
+        assert resumed_spec == spec
+        assert resumed_spec.target_spec.to_dict() == {
+            "target_id": "target_resume_b",
+            "config": {"market": "crypto"},
+        }
+
+    def test_resume_rejects_persisted_spec_json_without_target_spec(
+        self,
+        tmp_path: object,
+    ) -> None:
+        db = os.path.join(str(tmp_path), "resume_invalid.db")
+        storage_dsn = f"sqlite:///{db}"
+        spec = make_spec(
+            target_spec={"target_id": "target_resume_invalid", "config": {"market": "fx"}}
+        )
+        first = OptunaBackendAdapter(storage_dsn=storage_dsn)
+        handle = first.open_or_resume_experiment(spec)
+        study = first._studies[handle.study_id]
+        payload = json.loads(study.user_attrs["spec_json"])
+        payload.pop("target_spec", None)
+        study.set_user_attr("spec_json", json.dumps(payload, sort_keys=True))
+
+        second = OptunaBackendAdapter(storage_dsn=storage_dsn)
+        with pytest.raises(ValueError, match="persisted target_spec is invalid"):
+            second.open_or_resume_experiment(spec)

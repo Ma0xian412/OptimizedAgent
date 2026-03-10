@@ -15,7 +15,10 @@ from optimization_control_plane.domain.models import (
     ExperimentSpec,
     SamplerProfile,
     StudyHandle,
+    TargetSpec,
     TrialHandle,
+    compute_spec_hash,
+    validate_target_spec,
 )
 from optimization_control_plane.ports.optimizer_backend import TrialContext
 
@@ -46,6 +49,7 @@ class OptunaBackendAdapter:
         self._live_trials: dict[str, optuna.trial.Trial] = {}
 
     def open_or_resume_experiment(self, spec: ExperimentSpec) -> StudyHandle:
+        validate_target_spec(spec.target_spec, source="spec.target_spec")
         study_name = self._resolve_study_name(spec)
         direction_str: str = spec.objective_config.get("direction", "minimize")
         direction = (
@@ -73,29 +77,33 @@ class OptunaBackendAdapter:
                 f"stored={stored_hash}, given={spec.spec_hash}"
             )
 
+        canonical_spec = spec
         if stored_hash is None:
             study.set_user_attr(_SPEC_HASH_ATTR, spec.spec_hash)
-            study.set_user_attr(
-                _SPEC_JSON_ATTR,
-                json.dumps({
-                    "spec_id": spec.spec_id,
-                    "meta": spec.meta,
-                    "target_spec": spec.target_spec.to_dict(),
-                    "objective_config": spec.objective_config,
-                    "execution_config": spec.execution_config,
-                }, sort_keys=True),
+            spec_json = self._serialize_spec_json(spec)
+            study.set_user_attr(_SPEC_JSON_ATTR, spec_json)
+        else:
+            canonical_spec = self._read_persisted_spec(
+                study=study,
+                study_name=study_name,
+                expected_hash=stored_hash,
+            )
+            self._assert_resume_spec_matches(
+                study_name=study_name,
+                incoming=spec,
+                persisted=canonical_spec,
             )
 
         study_id = study_name
         self._studies[study_id] = study
-        self._specs[study_id] = spec
+        self._specs[study_id] = canonical_spec
 
         return StudyHandle(
             study_id=study_id,
             name=study_name,
-            spec_hash=spec.spec_hash,
+            spec_hash=canonical_spec.spec_hash,
             direction=direction_str,
-            settings=self._extract_study_settings(spec, study_name),
+            settings=self._extract_study_settings(canonical_spec, study_name),
         )
 
     def get_spec(self, study_id: str) -> ExperimentSpec:
@@ -316,3 +324,96 @@ class OptunaBackendAdapter:
         if isinstance(pruner_cfg, dict):
             settings["pruner"] = dict(pruner_cfg)
         return settings
+
+    @staticmethod
+    def _serialize_spec_json(spec: ExperimentSpec) -> str:
+        return json.dumps({
+            "spec_id": spec.spec_id,
+            "meta": spec.meta,
+            "target_spec": spec.target_spec.to_dict(),
+            "objective_config": spec.objective_config,
+            "execution_config": spec.execution_config,
+        }, sort_keys=True)
+
+    def _read_persisted_spec(
+        self,
+        *,
+        study: optuna.Study,
+        study_name: str,
+        expected_hash: str,
+    ) -> ExperimentSpec:
+        spec_json = study.user_attrs.get(_SPEC_JSON_ATTR)
+        if not isinstance(spec_json, str) or not spec_json:
+            raise ValueError(
+                f"study '{study_name}' missing valid {_SPEC_JSON_ATTR} for resume"
+            )
+        try:
+            payload = json.loads(spec_json)
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"study '{study_name}' has invalid {_SPEC_JSON_ATTR} JSON"
+            ) from exc
+        if not isinstance(payload, dict):
+            raise ValueError(
+                f"study '{study_name}' {_SPEC_JSON_ATTR} must decode to an object"
+            )
+        spec_id = payload.get("spec_id")
+        meta = payload.get("meta")
+        target_payload = payload.get("target_spec")
+        objective_config = payload.get("objective_config")
+        execution_config = payload.get("execution_config")
+        if not isinstance(spec_id, str) or not spec_id:
+            raise ValueError(f"study '{study_name}' persisted spec_id is invalid")
+        if not isinstance(meta, dict):
+            raise ValueError(f"study '{study_name}' persisted meta is invalid")
+        if not isinstance(target_payload, dict):
+            raise ValueError(f"study '{study_name}' persisted target_spec is invalid")
+        if not isinstance(objective_config, dict):
+            raise ValueError(
+                f"study '{study_name}' persisted objective_config is invalid"
+            )
+        if not isinstance(execution_config, dict):
+            raise ValueError(
+                f"study '{study_name}' persisted execution_config is invalid"
+            )
+        target_spec = TargetSpec.from_dict(target_payload)
+        validate_target_spec(target_spec, source=f"study '{study_name}' persisted target_spec")
+        computed_hash = compute_spec_hash(
+            spec_id=spec_id,
+            meta=meta,
+            target_spec=target_spec,
+            objective_config=objective_config,
+            execution_config=execution_config,
+        )
+        if computed_hash != expected_hash:
+            raise ValueError(
+                f"study '{study_name}' persisted spec_json hash mismatch: "
+                f"stored={expected_hash}, computed={computed_hash}"
+            )
+        return ExperimentSpec(
+            spec_id=spec_id,
+            spec_hash=expected_hash,
+            meta=meta,
+            target_spec=target_spec,
+            objective_config=objective_config,
+            execution_config=execution_config,
+        )
+
+    @staticmethod
+    def _assert_resume_spec_matches(
+        *,
+        study_name: str,
+        incoming: ExperimentSpec,
+        persisted: ExperimentSpec,
+    ) -> None:
+        if incoming.target_spec != persisted.target_spec:
+            raise ValueError(
+                f"target_spec mismatch for study '{study_name}': "
+                f"stored={persisted.target_spec.to_dict()}, "
+                f"given={incoming.target_spec.to_dict()}"
+            )
+        if incoming != persisted:
+            raise ValueError(
+                f"incoming spec for study '{study_name}' does not match persisted "
+                f"{_SPEC_JSON_ATTR}"
+            )

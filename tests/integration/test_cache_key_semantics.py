@@ -147,3 +147,21 @@ class TestCacheKeySemantics:
         run_records = _load_records(str(tmp_path), "run_records")
         assert len(run_records) == 1
         assert run_records[0]["target_id"] == "target_audit_1"
+
+    def test_different_targets_produce_isolated_run_records(self, tmp_path: Any) -> None:
+        spec_a = make_spec(
+            target_spec={"target_id": "target_iso_a", "config": {"market": "us"}}
+        )
+        spec_b = make_spec(
+            target_spec={"target_id": "target_iso_b", "config": {"market": "us"}}
+        )
+        _run_once(str(tmp_path), spec_a)
+        _run_once(str(tmp_path), spec_b)
+
+        run_records = _load_records(str(tmp_path), "run_records")
+        assert len(run_records) == 2
+        assert {record["target_id"] for record in run_records} == {
+            "target_iso_a",
+            "target_iso_b",
+        }
+        assert len({record["run_key"] for record in run_records}) == 2
