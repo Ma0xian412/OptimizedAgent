@@ -1,6 +1,10 @@
 from optimization_control_plane.adapters.backtestsys.execution_backend import (
     BackTestSysExecutionBackend,
 )
+from optimization_control_plane.adapters.backtestsys.dataset_discovery import (
+    BackTestSysDatasetDiscoveryAdapter,
+    DatasetDiscoveryConfig,
+)
 from optimization_control_plane.adapters.backtestsys.groundtruth_adapter import (
     BackTestSysGroundTruth,
     BackTestSysGroundTruthAdapter,
@@ -26,6 +30,7 @@ from optimization_control_plane.adapters.backtestsys.trial_loss_aggregator impor
 
 __all__ = [
     "BackTestSysCountDiffEvaluator",
+    "BackTestSysDatasetDiscoveryAdapter",
     "BackTestSysExecutionBackend",
     "BackTestSysGroundTruth",
     "BackTestSysGroundTruthAdapter",
@@ -34,6 +39,7 @@ __all__ = [
     "BackTestSysRunSpecBuilder",
     "BackTestSysRunSpecDefaults",
     "BackTestSysSearchSpace",
+    "DatasetDiscoveryConfig",
     "MeanTrialLossAggregator",
     "SearchParam",
 ]

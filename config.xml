@@ -15,8 +15,6 @@
         <data_dir>/workspace/data/backtestsys_mock</data_dir>
         <backtestsys_repo_root>/workspace/BackTestSys</backtestsys_repo_root>
         <backtestsys_base_config>/workspace/BackTestSys/config.xml</backtestsys_base_config>
-        <replay_order_file>/workspace/tests/fixtures/backtestsys_gt/orders.csv</replay_order_file>
-        <replay_cancel_file>/workspace/tests/fixtures/backtestsys_gt/cancels.csv</replay_cancel_file>
         <groundtruth_dir>/workspace/tests/fixtures/backtestsys_gt</groundtruth_dir>
     </paths>
 
@@ -24,10 +22,15 @@
         <train_ratio>9</train_ratio>
         <test_ratio>1</test_ratio>
         <seed>42</seed>
-        <files>
-            <file id="ds_a" path="/workspace/tests/fixtures/backtestsys_gt/market.csv" />
-            <file id="ds_b" path="/workspace/tests/fixtures/backtestsys_gt/market_b.csv" />
-        </files>
+        <auto_discovery>
+            <data_dir>/workspace/tests/fixtures/backtestsys_gt/data_auto</data_dir>
+            <data_glob>market_*.csv</data_glob>
+            <data_date_regex>market_(?P&lt;date&gt;\d{8})\.csv</data_date_regex>
+            <replay_order_dir>/workspace/tests/fixtures/backtestsys_gt/replay_auto</replay_order_dir>
+            <replay_order_pattern>orders_{date}.csv</replay_order_pattern>
+            <replay_cancel_dir>/workspace/tests/fixtures/backtestsys_gt/replay_auto</replay_cancel_dir>
+            <replay_cancel_pattern>cancels_{date}.csv</replay_cancel_pattern>
+        </auto_discovery>
     </dataset_plan>
 
     <sampler>
@@ -50,7 +53,7 @@
     </search_space>
 
     <base_overrides>
-        <override key="data.path" type="str">/workspace/tests/fixtures/backtestsys_gt/market.csv</override>
+        <override key="data.path" type="str">/workspace/tests/fixtures/backtestsys_gt/data_auto/market_20240101.csv</override>
         <override key="data.format" type="str">csv</override>
         <override key="runner.delay_out" type="int">0</override>
         <override key="strategy.name" type="str">ReplayStrategy_Impl</override>

@@ -18,7 +18,7 @@ python3 main.py --config /workspace/config.xml
 
 - `<study>`：实验与并发
 - `<paths>`：BackTestSys 路径与 GT 路径
-- `<dataset_plan>`：数据文件列表与 train:test 切分（9:1）
+- `<dataset_plan>`：数据自动发现与 train:test 切分（9:1）
 - `<sampler>`：Optuna sampler
 - `<pruner>`：Optuna pruner（当前仅终态事件）
 - `<search_space>`：超参搜索空间
@@ -54,8 +54,6 @@ python3 main.py --config /workspace/config.xml
     <data_dir>/workspace/data/backtestsys_mock</data_dir>
     <backtestsys_repo_root>/workspace/BackTestSys</backtestsys_repo_root>
     <backtestsys_base_config>/workspace/BackTestSys/config.xml</backtestsys_base_config>
-    <replay_order_file>/workspace/tests/fixtures/backtestsys_gt/orders.csv</replay_order_file>
-    <replay_cancel_file>/workspace/tests/fixtures/backtestsys_gt/cancels.csv</replay_cancel_file>
     <groundtruth_dir>/workspace/tests/fixtures/backtestsys_gt</groundtruth_dir>
 </paths>
 ```
@@ -63,6 +61,7 @@ python3 main.py --config /workspace/config.xml
 - `groundtruth_dir` 目前为全局 GT 目录，需包含：
   - `doneinfo.csv`
   - `excutiondetail.csv`
+- 自动发现模式下 `replay_order_file` / `replay_cancel_file` 可以不配置
 
 ---
 
@@ -73,24 +72,33 @@ python3 main.py --config /workspace/config.xml
     <train_ratio>9</train_ratio>
     <test_ratio>1</test_ratio>
     <seed>42</seed>
-    <files>
-        <file id="ds_a" path="/workspace/tests/fixtures/backtestsys_gt/market.csv" />
-        <file id="ds_b" path="/workspace/tests/fixtures/backtestsys_gt/market_b.csv" />
-    </files>
+    <auto_discovery>
+        <data_dir>/workspace/tests/fixtures/backtestsys_gt/data_auto</data_dir>
+        <data_glob>market_*.csv</data_glob>
+        <data_date_regex>market_(?P&lt;date&gt;\d{8})\.csv</data_date_regex>
+        <replay_order_dir>/workspace/tests/fixtures/backtestsys_gt/replay_auto</replay_order_dir>
+        <replay_order_pattern>orders_{date}.csv</replay_order_pattern>
+        <replay_cancel_dir>/workspace/tests/fixtures/backtestsys_gt/replay_auto</replay_cancel_dir>
+        <replay_cancel_pattern>cancels_{date}.csv</replay_cancel_pattern>
+    </auto_discovery>
 </dataset_plan>
 ```
 
 语义：
 
-1. 按 `seed` 对 `files` 做 deterministic shuffle。
-2. 按 `train_ratio:test_ratio` 切分为 train/test。
-3. 每个 **trial**（一组超参）会在 **train 全部文件** 上跑一遍并聚合 loss。
-4. 优化结束后，用最佳 train trial 在 **test 全部文件** 上跑一遍，生成 final report（不 tell）。
+1. 在 `data_dir` 内按 `data_glob` 自动搜索数据文件。
+2. 用 `data_date_regex` 从数据文件名提取日期（需包含命名组 `date` 或第一个捕获组）。
+3. 通过 `replay_order_pattern` / `replay_cancel_pattern` 按同一天匹配 replay 文件。
+4. 组装出 `dataset_plan.files` 后按 `seed` 做 deterministic shuffle。
+5. 按 `train_ratio:test_ratio` 切分为 train/test。
+6. 每个 **trial**（一组超参）会在 **train 全部文件** 上跑一遍并聚合 loss。
+7. 优化结束后，用最佳 train trial 在 **test 全部文件** 上跑一遍，生成 final report（不 tell）。
 
 约束：
 
-- `files` 至少 2 个
+- 自动发现后的数据文件至少 2 个
 - `train_ratio`、`test_ratio` 必须 > 0
+- 每个数据文件必须能匹配到同日期的 `order/cancel` 文件
 
 ---
 
@@ -133,7 +141,7 @@ python3 main.py --config /workspace/config.xml
 
 ```xml
 <base_overrides>
-    <override key="data.path" type="str">/workspace/tests/fixtures/backtestsys_gt/market.csv</override>
+    <override key="data.path" type="str">/workspace/tests/fixtures/backtestsys_gt/data_auto/market_20240101.csv</override>
     <override key="data.format" type="str">csv</override>
     <override key="runner.delay_out" type="int">0</override>
     <override key="strategy.name" type="str">ReplayStrategy_Impl</override>
@@ -143,6 +151,7 @@ python3 main.py --config /workspace/config.xml
 说明：
 
 - `data.path` 会被 `dataset_plan` 为每个子 run 动态覆盖。
+- `strategy.order_file` 与 `strategy.cancel_file` 也会由自动发现结果按日期动态覆盖。
 - 其余项作为每个子 run 的固定基础配置。
 
 ---

@@ -16,6 +16,9 @@ class DatasetShard:
     shard_id: str
     data_path: str
     split: str
+    date: str | None = None
+    order_file: str | None = None
+    cancel_file: str | None = None
 
 
 @dataclass(frozen=True)
@@ -139,10 +142,12 @@ def with_dataset_path(base_run_spec: RunSpec, shard: DatasetShard) -> RunSpec:
     overrides = dict(config.get("overrides", {}))
     overrides["data.path"] = shard.data_path
     config["overrides"] = overrides
+    config["strategy"] = _override_strategy_files(config.get("strategy"), shard)
     config["dataset"] = {
         "split": shard.split,
         "shard_id": shard.shard_id,
         "data_path": shard.data_path,
+        "date": shard.date,
     }
     return RunSpec(
         kind=base_run_spec.kind,
@@ -199,4 +204,16 @@ def _to_shard(item: dict[str, str], split: str) -> DatasetShard:
         shard_id=item["id"],
         data_path=item["path"],
         split=split,
+        date=item.get("date"),
+        order_file=item.get("order_file"),
+        cancel_file=item.get("cancel_file"),
     )
+
+
+def _override_strategy_files(raw_strategy: Any, shard: DatasetShard) -> dict[str, Any]:
+    strategy = dict(raw_strategy) if isinstance(raw_strategy, dict) else {}
+    if shard.order_file is not None:
+        strategy["order_file"] = shard.order_file
+    if shard.cancel_file is not None:
+        strategy["cancel_file"] = shard.cancel_file
+    return strategy

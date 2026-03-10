@@ -8,6 +8,7 @@ from typing import Any
 
 from optimization_control_plane.adapters.backtestsys import (
     BackTestSysCountDiffEvaluator,
+    BackTestSysDatasetDiscoveryAdapter,
     BackTestSysExecutionBackend,
     BackTestSysGroundTruthAdapter,
     BackTestSysObjectiveKeyBuilder,
@@ -15,6 +16,7 @@ from optimization_control_plane.adapters.backtestsys import (
     BackTestSysRunSpecBuilder,
     BackTestSysRunSpecDefaults,
     BackTestSysSearchSpace,
+    DatasetDiscoveryConfig,
     MeanTrialLossAggregator,
     SearchParam,
 )
@@ -89,6 +91,10 @@ def _load_config(config_path: str) -> AppConfig:
     search_params = _parse_search_params(root)
     base_overrides = _parse_base_overrides(root)
     dataset_files = _parse_dataset_files(root)
+    fallback_order = _optional_text(root, "./paths/replay_order_file")
+    fallback_cancel = _optional_text(root, "./paths/replay_cancel_file")
+    replay_order_file = _resolve_replay_file(dataset_files, "order_file", fallback_order)
+    replay_cancel_file = _resolve_replay_file(dataset_files, "cancel_file", fallback_cancel)
     return AppConfig(
         spec_id=_require_text(root, "./study/spec_id"),
         dataset_version=_require_text(root, "./study/dataset_version"),
@@ -103,8 +109,8 @@ def _load_config(config_path: str) -> AppConfig:
         data_dir=_require_text(root, "./paths/data_dir"),
         repo_root=_require_text(root, "./paths/backtestsys_repo_root"),
         base_config_path=_require_text(root, "./paths/backtestsys_base_config"),
-        replay_order_file=_require_text(root, "./paths/replay_order_file"),
-        replay_cancel_file=_require_text(root, "./paths/replay_cancel_file"),
+        replay_order_file=replay_order_file,
+        replay_cancel_file=replay_cancel_file,
         groundtruth_dir=_require_text(root, "./paths/groundtruth_dir"),
         search_params=search_params,
         base_overrides=base_overrides,
@@ -144,14 +150,58 @@ def _parse_base_overrides(root: ET.Element) -> dict[str, Any]:
 
 
 def _parse_dataset_files(root: ET.Element) -> list[dict[str, str]]:
+    explicit_files = root.findall("./dataset_plan/files/file")
+    if explicit_files:
+        return _parse_explicit_dataset_files(explicit_files)
+    discovery = _parse_discovery_config(root)
+    return BackTestSysDatasetDiscoveryAdapter().discover(discovery)
+
+
+def _parse_explicit_dataset_files(nodes: list[ET.Element]) -> list[dict[str, str]]:
     files: list[dict[str, str]] = []
-    for idx, node in enumerate(root.findall("./dataset_plan/files/file")):
+    for idx, node in enumerate(nodes):
         file_id = _require_attr(node, "id")
         path = _require_attr(node, "path")
-        files.append({"id": file_id or f"file_{idx}", "path": path})
+        parsed = {"id": file_id or f"file_{idx}", "path": path}
+        date = node.attrib.get("date")
+        order_file = node.attrib.get("order_file")
+        cancel_file = node.attrib.get("cancel_file")
+        if date:
+            parsed["date"] = date
+        if order_file:
+            parsed["order_file"] = order_file
+        if cancel_file:
+            parsed["cancel_file"] = cancel_file
+        files.append(parsed)
     if len(files) < 2:
         raise ValueError("dataset_plan.files must contain at least 2 file nodes")
     return files
+
+
+def _parse_discovery_config(root: ET.Element) -> DatasetDiscoveryConfig:
+    return DatasetDiscoveryConfig(
+        data_dir=_require_text(root, "./dataset_plan/auto_discovery/data_dir"),
+        data_glob=_require_text(root, "./dataset_plan/auto_discovery/data_glob"),
+        data_date_regex=_require_text(root, "./dataset_plan/auto_discovery/data_date_regex"),
+        replay_order_dir=_require_text(root, "./dataset_plan/auto_discovery/replay_order_dir"),
+        replay_order_pattern=_require_text(root, "./dataset_plan/auto_discovery/replay_order_pattern"),
+        replay_cancel_dir=_require_text(root, "./dataset_plan/auto_discovery/replay_cancel_dir"),
+        replay_cancel_pattern=_require_text(root, "./dataset_plan/auto_discovery/replay_cancel_pattern"),
+    )
+
+
+def _resolve_replay_file(
+    dataset_files: list[dict[str, str]],
+    key: str,
+    fallback: str | None,
+) -> str:
+    if fallback:
+        return fallback
+    for item in dataset_files:
+        value = item.get(key)
+        if value:
+            return value
+    raise ValueError(f"cannot resolve default replay file: {key}")
 
 
 def _parse_sampler(root: ET.Element) -> dict[str, Any]:
