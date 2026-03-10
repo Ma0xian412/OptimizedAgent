@@ -114,6 +114,7 @@ adapters/ → core/ → ports/ → domain/
 | `F-12` | 产物 | 控制面只处理 `artifact_refs` |
 | `F-13` | objective 变更 | 必须新开 study，但可复用 `RunCache` |
 | `F-14` | backend 交互 | 仅 `TrialOrchestrator` 可调用 `report / should_prune / tell` |
+| `F-15` | target 解释边界 | 冻结为 `TargetSpec -> TargetResolver -> ResolvedTarget -> RunSpec -> ExecutionBackend`（见 ADR 0002） |
 
 ## 2.2 `V1` 支持的 sampler
 
@@ -124,6 +125,17 @@ adapters/ → core/ → ports/ → domain/
 | `NSGAIISampler` | 否（接口预留） | 未来 `GENERATIONAL_BATCH` |
 | `NSGAIIISampler` | 否（接口预留） | 未来 `GENERATIONAL_BATCH` |
 | `CmaEsSampler` | 否（接口预留） | 未来 `GENERATIONAL_BATCH` / 小并发异步 |
+
+## 2.3 边界冻结补充（TargetResolver）
+
+本项目在迭代 1 冻结 target 解释边界，详见：`docs/adr/0002-target-resolver-architecture.md`。
+
+关键约束（摘要）：
+
+- `TargetSpec` 与 `ResolvedTarget` 均为 experiment 级固定对象。
+- `params` 为 trial 级变量，不改变 target 身份。
+- core 不解析 target kind；执行后端不消费原始 `TargetSpec`。
+- 缺失 target 或不可解析时必须 fail-fast，禁止 fallback 或反向猜测。
 
 ---
 
