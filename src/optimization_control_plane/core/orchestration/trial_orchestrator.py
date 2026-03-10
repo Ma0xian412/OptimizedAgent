@@ -29,6 +29,7 @@ from optimization_control_plane.domain.models import (
     ExecutionRequest,
     ExecutionEvent,
     ExperimentSpec,
+    ObjectiveResult,
     RunResult,
     RunSpec,
     SamplerProfile,
@@ -47,6 +48,8 @@ logger = logging.getLogger(__name__)
 
 _EVENT_LOOP_TIMEOUT = 1.0
 _SPEC_SETTINGS_KEYS = ("spec_id", "meta", "objective_config", "execution_config")
+_BASELINE_COMPONENT_KEYS = ("curve", "terminal", "cancel", "post")
+_RAW_COMPONENTS_ATTR_KEY = "raw_components"
 
 
 class TrialOrchestrator:
@@ -506,14 +509,64 @@ class TrialOrchestrator:
         if not objectives:
             raise RuntimeError("baseline run produced no completed sub-runs")
         baseline = aggregator.aggregate(objectives, self._spec, split="baseline_all")
+        baseline_components = self._aggregate_baseline_components(objectives)
         evaluator.set_base_loss(
             baseline.value,
             attrs={
                 "base_split": "all",
                 "base_run_count": len(objectives),
+                "baseline_components": baseline_components,
             },
         )
         logger.info(
             "baseline loss initialized",
-            extra={"base_loss": baseline.value, "base_run_count": len(objectives)},
+            extra={
+                "base_loss": baseline.value,
+                "base_run_count": len(objectives),
+                "baseline_components": baseline_components,
+            },
         )
+
+    def _aggregate_baseline_components(
+        self,
+        objectives: list[ObjectiveResult],
+    ) -> dict[str, float]:
+        sums: dict[str, float] = {}
+        counts: dict[str, int] = {}
+        for objective in objectives:
+            attrs = objective.attrs
+            for name in _BASELINE_COMPONENT_KEYS:
+                value = self._read_component_from_objective_attrs(attrs, name)
+                if value is None:
+                    continue
+                sums[name] = sums.get(name, 0.0) + value
+                counts[name] = counts.get(name, 0) + 1
+        return {
+            name: sums[name] / counts[name]
+            for name in _BASELINE_COMPONENT_KEYS
+            if counts.get(name, 0) > 0
+        }
+
+    @staticmethod
+    def _read_component_from_objective_attrs(attrs: dict[str, Any], name: str) -> float | None:
+        if name in attrs:
+            return TrialOrchestrator._require_numeric_component(
+                component_name=name,
+                value=attrs[name],
+            )
+        raw_components = attrs.get(_RAW_COMPONENTS_ATTR_KEY)
+        if isinstance(raw_components, dict) and name in raw_components:
+            return TrialOrchestrator._require_numeric_component(
+                component_name=name,
+                value=raw_components[name],
+            )
+        return None
+
+    @staticmethod
+    def _require_numeric_component(*, component_name: str, value: Any) -> float:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError(
+                "baseline objective attrs component must be numeric: "
+                f"name={component_name}, got={type(value).__name__}"
+            )
+        return float(value)
