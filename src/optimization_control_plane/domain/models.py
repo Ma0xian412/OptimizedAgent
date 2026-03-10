@@ -18,6 +18,12 @@ class ExperimentSpec:
 
 
 @dataclass(frozen=True)
+class GroundTruthData:
+    payload: object
+    fingerprint: str
+
+
+@dataclass(frozen=True)
 class StudyHandle:
     study_id: str
     name: str
