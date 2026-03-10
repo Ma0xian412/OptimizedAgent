@@ -8,6 +8,7 @@ from optimization_control_plane.adapters.backtestsys.dataset_discovery import (
 from optimization_control_plane.adapters.backtestsys.groundtruth_adapter import (
     BackTestSysGroundTruth,
     BackTestSysGroundTruthAdapter,
+    BackTestSysGroundTruthTable,
 )
 from optimization_control_plane.adapters.backtestsys.objective_evaluator import (
     BackTestSysCountDiffEvaluator,
@@ -34,6 +35,7 @@ __all__ = [
     "BackTestSysExecutionBackend",
     "BackTestSysGroundTruth",
     "BackTestSysGroundTruthAdapter",
+    "BackTestSysGroundTruthTable",
     "BackTestSysObjectiveKeyBuilder",
     "BackTestSysRunKeyBuilder",
     "BackTestSysRunSpecBuilder",
