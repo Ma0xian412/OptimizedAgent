@@ -1,13 +1,10 @@
 # BackTestSys 优化配置说明（`config.xml`）
 
-本文说明控制面入口 `main.py` 对 `config.xml` 的配置要求、字段含义与示例。
+本文对应当前实现：`core` 已支持“一个 trial 对 train 全文件 fan-out 运行并聚合 loss”，并在优化结束后生成 **test-only final report**（不参与 `tell`）。
 
 ---
 
-## 1. 配置文件位置与启动方式
-
-- 默认配置文件名：`config.xml`（仓库根目录）
-- 启动命令：
+## 1. 启动方式
 
 ```bash
 python3 main.py --config /workspace/config.xml
@@ -17,14 +14,15 @@ python3 main.py --config /workspace/config.xml
 
 ## 2. 顶层结构
 
-`config.xml` 顶层节点为 `<optimization>`，包含以下子节点：
+`config.xml` 顶层节点 `<optimization>` 下包含：
 
-- `<study>`：实验与并发控制
-- `<paths>`：路径配置
-- `<sampler>`：采样器配置（Optuna）
-- `<pruner>`：剪枝器配置（Optuna）
-- `<search_space>`：可优化参数空间
-- `<base_overrides>`：每次回测都生效的固定覆盖项
+- `<study>`：实验与并发
+- `<paths>`：BackTestSys 路径与 GT 路径
+- `<dataset_plan>`：数据文件列表与 train:test 切分（9:1）
+- `<sampler>`：Optuna sampler
+- `<pruner>`：Optuna pruner（当前仅终态事件）
+- `<search_space>`：超参搜索空间
+- `<base_overrides>`：固定覆盖项
 
 ---
 
@@ -43,16 +41,9 @@ python3 main.py --config /workspace/config.xml
 </study>
 ```
 
-字段说明：
-
-- `spec_id`：实验标识（必填，非空字符串）
-- `dataset_version`：数据版本（参与 `spec_hash`）
-- `engine_version`：引擎版本（参与 `spec_hash`）
-- `storage_dsn`：Optuna 存储地址（建议 sqlite）
-- `max_trials`：最多 ask 多少个 trial
-- `max_failures`：允许失败上限
-- `max_in_flight_trials`：控制面最大并发 trial 数
-- `max_workers`：BackTestSys 执行后端线程池 worker 数
+- `max_trials`：trial 数（不是子 run 数）
+- `max_in_flight_trials`：控制面并发槽位
+- `max_workers`：BackTestSys 执行后端线程池大小
 
 ---
 
@@ -69,20 +60,41 @@ python3 main.py --config /workspace/config.xml
 </paths>
 ```
 
-字段说明：
-
-- `data_dir`：控制面本地存储目录（run cache / objective cache / result store）
-- `backtestsys_repo_root`：BackTestSys 仓库根目录
-- `backtestsys_base_config`：BackTestSys 原始配置文件路径
-- `replay_order_file`：`ReplayStrategy_Impl` 订单 CSV
-- `replay_cancel_file`：`ReplayStrategy_Impl` 撤单 CSV
-- `groundtruth_dir`：GT 文件目录，必须包含：
+- `groundtruth_dir` 目前为全局 GT 目录，需包含：
   - `doneinfo.csv`
-  - `excutiondetail.csv`（注意文件名拼写是 `excutiondetail`）
+  - `excutiondetail.csv`
 
 ---
 
-## 5. sampler 节点
+## 5. dataset_plan 节点（核心）
+
+```xml
+<dataset_plan>
+    <train_ratio>9</train_ratio>
+    <test_ratio>1</test_ratio>
+    <seed>42</seed>
+    <files>
+        <file id="ds_a" path="/workspace/tests/fixtures/backtestsys_gt/market.csv" />
+        <file id="ds_b" path="/workspace/tests/fixtures/backtestsys_gt/market_b.csv" />
+    </files>
+</dataset_plan>
+```
+
+语义：
+
+1. 按 `seed` 对 `files` 做 deterministic shuffle。
+2. 按 `train_ratio:test_ratio` 切分为 train/test。
+3. 每个 **trial**（一组超参）会在 **train 全部文件** 上跑一遍并聚合 loss。
+4. 优化结束后，用最佳 train trial 在 **test 全部文件** 上跑一遍，生成 final report（不 tell）。
+
+约束：
+
+- `files` 至少 2 个
+- `train_ratio`、`test_ratio` 必须 > 0
+
+---
+
+## 6. sampler / pruner
 
 ```xml
 <sampler>
@@ -91,18 +103,7 @@ python3 main.py --config /workspace/config.xml
     <n_startup_trials>4</n_startup_trials>
     <constant_liar>true</constant_liar>
 </sampler>
-```
 
-- `type`：`tpe` 或 `random`
-- `seed`：随机种子
-- `n_startup_trials`：TPE 冷启动 trial 数（可选）
-- `constant_liar`：并发下 TPE 建议开启（可选）
-
----
-
-## 6. pruner 节点
-
-```xml
 <pruner>
     <type>median</type>
     <n_startup_trials>2</n_startup_trials>
@@ -110,14 +111,11 @@ python3 main.py --config /workspace/config.xml
 </pruner>
 ```
 
-- `type`：`median` 或 `nop`
-- `n_startup_trials`、`n_warmup_steps`：`median` 参数（可选）
-
-说明：当前 BackTestSys 执行适配器只上报终态事件，不产出 checkpoint，pruner 仍可保留配置但不会触发中途剪枝链路。
+说明：当前执行后端主要上报终态事件，pruner 参数可保留但中途剪枝触发有限。
 
 ---
 
-## 7. search_space 节点
+## 7. search_space
 
 ```xml
 <search_space>
@@ -127,16 +125,11 @@ python3 main.py --config /workspace/config.xml
 </search_space>
 ```
 
-每个 `<param>` 含义：
-
-- `name`：参数名（会作为 BackTestSys 配置覆盖路径）
-- `type`：`int` / `float` / `categorical`
-- `low`、`high`：`int/float` 必填
-- `choices`：`categorical` 必填，逗号分隔（例如 `choices="A,B,C"`）
+`name` 使用 BackTestSys 配置点路径；采样值会写入 `run_spec.config.overrides`。
 
 ---
 
-## 8. base_overrides 节点
+## 8. base_overrides
 
 ```xml
 <base_overrides>
@@ -149,35 +142,39 @@ python3 main.py --config /workspace/config.xml
 
 说明：
 
-- 这些项对所有 trial 固定生效
-- `search_space` 采样出的参数会覆盖同名项（优先级更高）
-- `key` 使用点路径，对应 BackTestSys `BacktestConfig` 的字段层级
-- `type` 支持：`int` / `float` / `bool` / `str`
+- `data.path` 会被 `dataset_plan` 为每个子 run 动态覆盖。
+- 其余项作为每个子 run 的固定基础配置。
 
 ---
 
-## 9. 当前 objective 语义
+## 9. loss 与聚合
 
-当前目标固定为 **minimize**：
+### 9.1 单文件 loss（run loss）
+
+当前 evaluator 定义：
 
 `|DoneInfo_count - GT_doneinfo_count| + |ExecutionDetail_count - GT_executiondetail_count|`
 
-其中：
+### 9.2 trial 聚合 loss（port + adapter）
 
-- 回测结果来自 BackTestSys `app.run()` 的 `BacktestRunResult`
-- GT 来自 `groundtruth_dir` 下的 `doneinfo.csv` 与 `excutiondetail.csv`
+core 调用 `TrialLossAggregator` 聚合一个 trial 的多个 run loss。  
+当前 BackTestSys adapter 使用 `MeanTrialLossAggregator`（均值）：
 
-同时，若一次回测结果满足：
-
-- `len(DoneInfo) + len(ExecutionDetail) == 0`
-
-该 trial 会被标记为 `FAILED`。
+`trial_loss = mean(run_loss_1 ... run_loss_n)`
 
 ---
 
-## 10. 最小可运行示例
+## 10. test-only final report
 
-使用仓库当前提供的示例数据时，下面命令可直接跑通：
+- 优化结束后自动触发
+- 使用最佳 train trial 的超参
+- 在 test 文件集合上执行并聚合
+- 结果写入 `ResultStore.run_record`（key: `final_report:test`）
+- **不会调用 `OptimizerBackend.tell()`**
+
+---
+
+## 11. 最小示例
 
 ```bash
 python3 main.py --config config.xml

@@ -40,3 +40,13 @@ class ProgressScorer(Protocol):
 @runtime_checkable
 class ObjectiveEvaluator(Protocol):
     def evaluate(self, run_result: RunResult, spec: ExperimentSpec) -> ObjectiveResult: ...
+
+
+@runtime_checkable
+class TrialLossAggregator(Protocol):
+    def aggregate(
+        self,
+        run_objectives: list[ObjectiveResult],
+        spec: ExperimentSpec,
+        split: str,
+    ) -> ObjectiveResult: ...

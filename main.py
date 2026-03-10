@@ -15,6 +15,7 @@ from optimization_control_plane.adapters.backtestsys import (
     BackTestSysRunSpecBuilder,
     BackTestSysRunSpecDefaults,
     BackTestSysSearchSpace,
+    MeanTrialLossAggregator,
     SearchParam,
 )
 from optimization_control_plane.adapters.optuna import OptunaBackendAdapter
@@ -53,6 +54,10 @@ class AppConfig:
     groundtruth_dir: str
     search_params: list[SearchParam]
     base_overrides: dict[str, Any]
+    dataset_files: list[dict[str, str]]
+    train_ratio: int
+    test_ratio: int
+    dataset_seed: int
 
 
 def main() -> None:
@@ -83,6 +88,7 @@ def _load_config(config_path: str) -> AppConfig:
     root = ET.parse(config_path).getroot()
     search_params = _parse_search_params(root)
     base_overrides = _parse_base_overrides(root)
+    dataset_files = _parse_dataset_files(root)
     return AppConfig(
         spec_id=_require_text(root, "./study/spec_id"),
         dataset_version=_require_text(root, "./study/dataset_version"),
@@ -102,6 +108,10 @@ def _load_config(config_path: str) -> AppConfig:
         groundtruth_dir=_require_text(root, "./paths/groundtruth_dir"),
         search_params=search_params,
         base_overrides=base_overrides,
+        dataset_files=dataset_files,
+        train_ratio=_as_int(_require_text(root, "./dataset_plan/train_ratio")),
+        test_ratio=_as_int(_require_text(root, "./dataset_plan/test_ratio")),
+        dataset_seed=_as_int(_require_text(root, "./dataset_plan/seed")),
     )
 
 
@@ -131,6 +141,17 @@ def _parse_base_overrides(root: ET.Element) -> dict[str, Any]:
         text = (node.text or "").strip()
         overrides[key] = _cast_value(text, value_type)
     return overrides
+
+
+def _parse_dataset_files(root: ET.Element) -> list[dict[str, str]]:
+    files: list[dict[str, str]] = []
+    for idx, node in enumerate(root.findall("./dataset_plan/files/file")):
+        file_id = _require_attr(node, "id")
+        path = _require_attr(node, "path")
+        files.append({"id": file_id or f"file_{idx}", "path": path})
+    if len(files) < 2:
+        raise ValueError("dataset_plan.files must contain at least 2 file nodes")
+    return files
 
 
 def _parse_sampler(root: ET.Element) -> dict[str, Any]:
@@ -195,6 +216,12 @@ def _build_settings(cfg: AppConfig, spec: ExperimentSpec) -> dict[str, Any]:
             "max_trials": cfg.max_trials,
             "max_failures": cfg.max_failures,
         },
+        "dataset_plan": {
+            "files": list(cfg.dataset_files),
+            "train_ratio": cfg.train_ratio,
+            "test_ratio": cfg.test_ratio,
+            "seed": cfg.dataset_seed,
+        },
     }
 
 
@@ -219,6 +246,7 @@ def _build_orchestrator(cfg: AppConfig) -> tuple[TrialOrchestrator, BackTestSysE
             groundtruth_adapter=BackTestSysGroundTruthAdapter(),
             groundtruth_dir=cfg.groundtruth_dir,
         ),
+        trial_loss_aggregator=MeanTrialLossAggregator(),
     )
     execution_backend = BackTestSysExecutionBackend(max_workers=cfg.max_workers)
     orchestrator = TrialOrchestrator(

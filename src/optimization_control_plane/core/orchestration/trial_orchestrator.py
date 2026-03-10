@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from uuid import uuid4
 from typing import Any
 
 from optimization_control_plane.core.objective_definition import ObjectiveDefinition
@@ -17,9 +18,19 @@ from optimization_control_plane.core.orchestration._request_planner import (
 from optimization_control_plane.core.orchestration.inflight_registry import (
     InflightRegistry,
 )
+from optimization_control_plane.core.orchestration.trial_batching import (
+    DatasetPlan,
+    TrialBatchRegistry,
+    build_dataset_plan,
+    with_dataset_path,
+)
+from optimization_control_plane.domain.enums import EventKind
 from optimization_control_plane.domain.models import (
+    ExecutionRequest,
     ExecutionEvent,
     ExperimentSpec,
+    RunResult,
+    RunSpec,
     SamplerProfile,
     StudyHandle,
     compute_spec_hash,
@@ -69,6 +80,8 @@ class TrialOrchestrator:
         self._metrics = Metrics()
         self._max_trials: int | None = None
         self._max_failures: int | None = None
+        self._dataset_plan: DatasetPlan | None = None
+        self._trial_batches = TrialBatchRegistry()
 
     @property
     def metrics(self) -> Metrics:
@@ -96,6 +109,9 @@ class TrialOrchestrator:
         stop_cfg = resolved_settings.get("stop", {})
         self._max_trials = stop_cfg.get("max_trials")
         self._max_failures = stop_cfg.get("max_failures")
+        self._dataset_plan = build_dataset_plan(resolved_settings)
+        if self._dataset_plan is not None and self._objective_def.trial_loss_aggregator is None:
+            raise ValueError("trial_loss_aggregator is required when dataset_plan is enabled")
 
         logger.info(
             "orchestrator started",
@@ -104,6 +120,14 @@ class TrialOrchestrator:
                 "spec_hash": self._spec.spec_hash,
                 "sampling_mode": self._profile.mode.value,
                 "max_in_flight": max_in_flight,
+                "train_shards": (
+                    len(self._dataset_plan.train_shards)
+                    if self._dataset_plan is not None else 0
+                ),
+                "test_shards": (
+                    len(self._dataset_plan.test_shards)
+                    if self._dataset_plan is not None else 0
+                ),
             },
         )
         self._run_loop()
@@ -144,6 +168,7 @@ class TrialOrchestrator:
                 self._handle_event(event)
 
         self._drain_remaining(study_id)
+        self._run_final_test_report()
         logger.info("orchestrator stopped", extra={"study_id": study_id})
 
     def stop(self) -> None:
@@ -180,6 +205,8 @@ class TrialOrchestrator:
             metrics=self._metrics,
             max_trials=self._max_trials,
             max_failures=self._max_failures,
+            dataset_plan=self._dataset_plan,
+            trial_batches=(self._trial_batches if self._dataset_plan is not None else None),
         )
 
     def _handle_event(self, event: ExecutionEvent) -> None:
@@ -200,6 +227,7 @@ class TrialOrchestrator:
             inflight_registry=self._inflight,
             study_state=self._study_state,
             metrics=self._metrics,
+            trial_batches=(self._trial_batches if self._dataset_plan is not None else None),
         )
 
         handler = EVENT_HANDLERS.get(event.kind)
@@ -263,6 +291,7 @@ class TrialOrchestrator:
         self._request_buffer = []
         self._stop_requested = False
         self._metrics = Metrics()
+        self._trial_batches = TrialBatchRegistry()
 
     def _resolve_start_spec(
         self,
@@ -347,3 +376,75 @@ class TrialOrchestrator:
         if isinstance(pruner, dict):
             objective_config["pruner"] = dict(pruner)
         return objective_config
+
+    def _run_final_test_report(self) -> None:
+        if self._dataset_plan is None or not self._dataset_plan.test_shards:
+            return
+        if self._spec is None:
+            return
+        base_run_spec = self._trial_batches.best_train_run_spec
+        if base_run_spec is None:
+            logger.warning("skip final test report: no successful train trial")
+            return
+        aggregator = self._objective_def.trial_loss_aggregator
+        if aggregator is None:
+            return
+        handles = []
+        for shard in self._dataset_plan.test_shards:
+            run_spec = with_dataset_path(base_run_spec, shard)
+            request = self._build_final_test_request(run_spec)
+            handles.append(self._execution_backend.submit(request))
+        objectives = []
+        pending = list(handles)
+        while pending:
+            event = self._execution_backend.wait_any(pending, timeout=_EVENT_LOOP_TIMEOUT)
+            if event is None:
+                continue
+            pending = [handle for handle in pending if handle.handle_id != event.handle_id]
+            if event.kind != EventKind.COMPLETED or event.run_result is None:
+                logger.warning(
+                    "test report sub-run not completed",
+                    extra={"event_kind": event.kind.value, "handle_id": event.handle_id},
+                )
+                continue
+            objectives.append(self._objective_def.objective_evaluator.evaluate(event.run_result, self._spec))
+        if not objectives:
+            logger.warning("skip final test report: no completed test sub-run")
+            return
+        report = aggregator.aggregate(objectives, self._spec, split="test")
+        self._result_store.write_run_record(
+            "final_report:test",
+            RunResult(
+                metrics={"test_objective": report.value, "test_run_count": len(objectives)},
+                diagnostics={
+                    "report_type": "final_test",
+                    "best_train_trial_id": self._trial_batches.best_train_trial_id,
+                },
+                artifact_refs=list(report.artifact_refs),
+            ),
+        )
+        logger.info(
+            "final test report generated",
+            extra={
+                "best_train_trial_id": self._trial_batches.best_train_trial_id,
+                "test_objective": report.value,
+                "test_run_count": len(objectives),
+            },
+        )
+
+    def _build_final_test_request(self, run_spec: RunSpec) -> ExecutionRequest:
+        assert self._spec is not None
+        run_key = self._objective_def.run_key_builder.build(run_spec, self._spec)
+        objective_key = self._objective_def.objective_key_builder.build(
+            run_key,
+            self._spec.objective_config,
+        )
+        return ExecutionRequest(
+            request_id=f"final_{uuid4().hex[:12]}",
+            trial_id=f"final_test_{uuid4().hex[:8]}",
+            run_key=run_key,
+            objective_key=objective_key,
+            cohort_id="final_test",
+            priority=0,
+            run_spec=run_spec,
+        )

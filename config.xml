@@ -20,6 +20,16 @@
         <groundtruth_dir>/workspace/tests/fixtures/backtestsys_gt</groundtruth_dir>
     </paths>
 
+    <dataset_plan>
+        <train_ratio>9</train_ratio>
+        <test_ratio>1</test_ratio>
+        <seed>42</seed>
+        <files>
+            <file id="ds_a" path="/workspace/tests/fixtures/backtestsys_gt/market.csv" />
+            <file id="ds_b" path="/workspace/tests/fixtures/backtestsys_gt/market_b.csv" />
+        </files>
+    </dataset_plan>
+
     <sampler>
         <type>tpe</type>
         <seed>42</seed>

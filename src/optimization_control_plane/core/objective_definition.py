@@ -9,6 +9,7 @@ from optimization_control_plane.ports.objective import (
     RunKeyBuilder,
     RunSpecBuilder,
     SearchSpace,
+    TrialLossAggregator,
 )
 
 
@@ -20,3 +21,4 @@ class ObjectiveDefinition:
     objective_key_builder: ObjectiveKeyBuilder
     progress_scorer: ProgressScorer | None
     objective_evaluator: ObjectiveEvaluator
+    trial_loss_aggregator: TrialLossAggregator | None = None

@@ -20,6 +20,9 @@ from optimization_control_plane.adapters.backtestsys.search_space import (
     BackTestSysSearchSpace,
     SearchParam,
 )
+from optimization_control_plane.adapters.backtestsys.trial_loss_aggregator import (
+    MeanTrialLossAggregator,
+)
 
 __all__ = [
     "BackTestSysCountDiffEvaluator",
@@ -31,5 +34,6 @@ __all__ = [
     "BackTestSysRunSpecBuilder",
     "BackTestSysRunSpecDefaults",
     "BackTestSysSearchSpace",
+    "MeanTrialLossAggregator",
     "SearchParam",
 ]
