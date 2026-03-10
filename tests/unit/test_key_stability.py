@@ -119,6 +119,29 @@ class TestRunKeyStability:
         )
         assert builder.build(run_spec_a, spec_a) != builder.build(run_spec_b, spec_b)
 
+    def test_same_params_different_resolved_target_different_key_even_with_same_spec(self) -> None:
+        builder = StubRunKeyBuilder()
+        spec = make_spec(target_spec={"target_id": "target_input", "config": {"market": "us"}})
+        run_spec_a = RunSpec(
+            kind="test",
+            config={"x": 1.0},
+            resources={},
+            resolved_target=ResolvedTarget(
+                target_id="resolved_target_a",
+                config={"market": "us", "venue": "paper"},
+            ),
+        )
+        run_spec_b = RunSpec(
+            kind="test",
+            config={"x": 1.0},
+            resources={},
+            resolved_target=ResolvedTarget(
+                target_id="resolved_target_b",
+                config={"market": "us", "venue": "paper"},
+            ),
+        )
+        assert builder.build(run_spec_a, spec) != builder.build(run_spec_b, spec)
+
     def test_same_params_same_target_same_key(self) -> None:
         builder = StubRunKeyBuilder()
         spec = make_spec(target_spec={"target_id": "target_a", "config": {"market": "us"}})
@@ -139,10 +162,24 @@ class TestRunKeyStability:
     def test_equivalent_target_config_order_same_key(self) -> None:
         builder = StubRunKeyBuilder()
         spec_a = make_spec(
-            target_spec={"target_id": "target_a", "config": {"venue": "paper", "market": "us"}}
+            target_spec={
+                "target_id": "target_a",
+                "config": {
+                    "venue": "paper",
+                    "market": "us",
+                    "routing": {"beta": 2, "alpha": 1},
+                },
+            }
         )
         spec_b = make_spec(
-            target_spec={"target_id": "target_a", "config": {"market": "us", "venue": "paper"}}
+            target_spec={
+                "target_id": "target_a",
+                "config": {
+                    "routing": {"alpha": 1, "beta": 2},
+                    "market": "us",
+                    "venue": "paper",
+                },
+            }
         )
         run_spec_a = RunSpec(
             kind="test",

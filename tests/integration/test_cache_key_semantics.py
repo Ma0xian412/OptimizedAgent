@@ -18,7 +18,7 @@ from optimization_control_plane.adapters.storage import (
     FileRunCache,
 )
 from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrator
-from optimization_control_plane.domain.models import ExperimentSpec, RunResult
+from optimization_control_plane.domain.models import ExperimentSpec, ResolvedTarget, RunResult
 from tests.conftest import (
     StubObjectiveEvaluator,
     StubObjectiveKeyBuilder,
@@ -43,7 +43,12 @@ def _settings_for_spec(spec: ExperimentSpec, max_trials: int = 1) -> dict[str, A
     )
 
 
-def _run_once(tmp: str, spec: ExperimentSpec, max_trials: int = 1) -> dict[str, int]:
+def _run_once(
+    tmp: str,
+    spec: ExperimentSpec,
+    max_trials: int = 1,
+    target_resolver: StubTargetResolver | None = None,
+) -> dict[str, int]:
     db = os.path.join(tmp, "test.db")
     backend = OptunaBackendAdapter(storage_dsn=f"sqlite:///{db}")
     exec_be = FakeExecutionBackend()
@@ -68,7 +73,7 @@ def _run_once(tmp: str, spec: ExperimentSpec, max_trials: int = 1) -> dict[str, 
         run_cache=FileRunCache(os.path.join(tmp, "data")),
         objective_cache=FileObjectiveCache(os.path.join(tmp, "data")),
         result_store=FileResultStore(os.path.join(tmp, "data")),
-        target_resolver=StubTargetResolver(),
+        target_resolver=target_resolver or StubTargetResolver(),
     )
     orch.start(spec, _settings_for_spec(spec, max_trials=max_trials))
     return orch.metrics.snapshot()
@@ -104,6 +109,9 @@ class TestCacheKeySemantics:
         assert second["execution_submitted_total"] == 1
         assert second["objective_cache_hit_total"] == 0
         assert second["run_cache_hit_total"] == 0
+        run_cache_records = _load_records(str(tmp_path), "run_cache")
+        assert len(run_cache_records) == 2
+        assert len({record["run_key"] for record in run_cache_records}) == 2
 
     def test_same_target_same_run_result_different_objective_config_splits_objective_key(
         self,
@@ -139,16 +147,28 @@ class TestCacheKeySemantics:
         assert second["execution_submitted_total"] == 0
         assert second["objective_cache_hit_total"] == 0
         assert second["run_cache_hit_total"] >= 1
+        run_cache_records = _load_records(str(tmp_path), "run_cache")
+        objective_cache_records = _load_records(str(tmp_path), "objective_cache")
+        assert len(run_cache_records) == 1
+        assert len(objective_cache_records) == 2
+        assert len({record["objective_key"] for record in objective_cache_records}) == 2
 
-    def test_run_record_contains_explicit_target_id(self, tmp_path: Any) -> None:
+    def test_run_record_target_id_is_from_resolved_target(self, tmp_path: Any) -> None:
         spec = make_spec(
-            target_spec={"target_id": "target_audit_1", "config": {"market": "crypto"}}
+            target_spec={"target_id": "target_spec_input", "config": {"market": "crypto"}}
         )
-        _run_once(str(tmp_path), spec)
+        resolver = StubTargetResolver(
+            resolved_target=ResolvedTarget(
+                target_id="resolved_target_audit_1",
+                config={"market": "crypto", "venue": "paper"},
+            )
+        )
+        _run_once(str(tmp_path), spec, target_resolver=resolver)
 
         run_records = _load_records(str(tmp_path), "run_records")
         assert len(run_records) == 1
-        assert run_records[0]["target_id"] == "target_audit_1"
+        assert run_records[0]["target_id"] == "resolved_target_audit_1"
+        assert run_records[0]["target_id"] != spec.target_spec.target_id
 
     def test_different_targets_produce_isolated_run_records(self, tmp_path: Any) -> None:
         spec_a = make_spec(
