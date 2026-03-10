@@ -88,6 +88,9 @@ class FakeExecutionBackend:
     def get_submitted_request(self, handle_id: str) -> ExecutionRequest:
         return self._submitted_requests[handle_id]
 
+    def submitted_requests(self) -> list[ExecutionRequest]:
+        return list(self._submitted_requests.values())
+
     def _enqueue_events(self, handle_id: str, script: FakeRunScript) -> None:
         for cp in script.checkpoints:
             self._pending_events.append(ExecutionEvent(

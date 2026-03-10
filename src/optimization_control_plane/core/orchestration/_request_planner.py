@@ -16,6 +16,7 @@ from optimization_control_plane.domain.models import (
     ExecutionRequest,
     ExperimentSpec,
     SamplerProfile,
+    validate_target_spec,
 )
 from optimization_control_plane.domain.state import ResourceState, StudyRuntimeState
 from optimization_control_plane.ports.cache import ObjectiveCache, RunCache
@@ -52,6 +53,7 @@ def _plan_and_fill(
     max_failures: int | None,
 ) -> None:
     """Ask trials and fill execution slots up to target."""
+    target_spec = validate_target_spec(spec.target_spec, source="spec.target_spec")
     while not stop_requested and _slots_available(study_state, request_buffer, target):
         if _should_stop_asking(study_state, max_trials, max_failures):
             break
@@ -70,7 +72,15 @@ def _plan_and_fill(
             run_key, spec.objective_config
         )
 
-        log_extra = _log_extra(study_id, trial.trial_id, trial.number, run_key, obj_key, profile)
+        log_extra = _log_extra(
+            study_id,
+            trial.trial_id,
+            trial.number,
+            run_key,
+            obj_key,
+            profile,
+            target_spec.target_id,
+        )
 
         obj = objective_cache.get(obj_key)
         if obj is not None:
@@ -174,6 +184,7 @@ def _log_extra(
     run_key: str,
     objective_key: str,
     profile: SamplerProfile,
+    target_id: str,
 ) -> dict[str, Any]:
     return {
         "study_id": study_id,
@@ -181,5 +192,6 @@ def _log_extra(
         "trial_number": trial_number,
         "run_key": run_key,
         "objective_key": objective_key,
+        "target_id": target_id,
         "sampling_mode": profile.mode.value,
     }

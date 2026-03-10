@@ -13,6 +13,14 @@ class TargetSpec:
     target_id: str
     config: dict[str, Any]
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.target_id, str) or not self.target_id.strip():
+            raise ValueError("target_spec.target_id must be a non-empty string")
+        if not isinstance(self.config, dict):
+            raise ValueError("target_spec.config must be a dict")
+        object.__setattr__(self, "target_id", self.target_id.strip())
+        object.__setattr__(self, "config", dict(self.config))
+
     def to_dict(self) -> dict[str, Any]:
         return {"target_id": self.target_id, "config": dict(self.config)}
 
@@ -28,6 +36,20 @@ class TargetSpec:
 
     def __hash__(self) -> int:
         return hash((self.target_id, stable_json_serialize(self.config)))
+
+
+def validate_target_spec(
+    value: Any,
+    *,
+    source: str = "target_spec",
+) -> TargetSpec:
+    if not isinstance(value, TargetSpec):
+        raise ValueError(f"{source} must be a TargetSpec")
+    if not isinstance(value.target_id, str) or not value.target_id.strip():
+        raise ValueError(f"{source}.target_id must be a non-empty string")
+    if not isinstance(value.config, dict):
+        raise ValueError(f"{source}.config must be a dict")
+    return value
 
 
 @dataclass(frozen=True)

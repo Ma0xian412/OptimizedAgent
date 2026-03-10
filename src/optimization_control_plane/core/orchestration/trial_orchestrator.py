@@ -24,6 +24,7 @@ from optimization_control_plane.domain.models import (
     StudyHandle,
     TargetSpec,
     compute_spec_hash,
+    validate_target_spec,
 )
 from optimization_control_plane.domain.state import ResourceState, StudyRuntimeState
 from optimization_control_plane.ports.cache import ObjectiveCache, RunCache
@@ -92,9 +93,11 @@ class TrialOrchestrator:
     ) -> None:
         resolved_settings = dict(settings or {})
         resolved_spec = self._resolve_start_spec(spec=spec, settings=resolved_settings)
+        self._validate_start_spec(resolved_spec)
 
         self._study_handle = self._backend.open_or_resume_experiment(resolved_spec)
         self._spec = self._backend.get_spec(self._study_handle.study_id)
+        self._validate_start_spec(self._spec)
         self._profile = self._backend.get_sampler_profile(self._study_handle.study_id)
 
         max_in_flight = resolved_settings.get("parallelism", {}).get("max_in_flight_trials", 1)
@@ -109,6 +112,7 @@ class TrialOrchestrator:
             extra={
                 "study_id": self._study_handle.study_id,
                 "spec_hash": self._spec.spec_hash,
+                "target_id": self._spec.target_spec.target_id,
                 "sampling_mode": self._profile.mode.value,
                 "max_in_flight": max_in_flight,
             },
@@ -365,3 +369,7 @@ class TrialOrchestrator:
         if isinstance(pruner, dict):
             objective_config["pruner"] = dict(pruner)
         return objective_config
+
+    @staticmethod
+    def _validate_start_spec(spec: ExperimentSpec) -> None:
+        validate_target_spec(spec.target_spec, source="spec.target_spec")

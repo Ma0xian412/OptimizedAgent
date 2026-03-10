@@ -19,6 +19,7 @@ from optimization_control_plane.adapters.storage import (
     FileRunCache,
 )
 from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrator
+from optimization_control_plane.domain.models import TargetSpec
 from tests.conftest import (
     StubObjectiveEvaluator,
     StubObjectiveKeyBuilder,
@@ -115,3 +116,31 @@ def test_start_does_not_accept_target_spec_in_execution_config(tmp_path: Any) ->
 
     with pytest.raises(ValueError, match="missing=\\['target_spec'\\]"):
         orch.start(settings=settings)
+
+
+def _unsafe_target_spec(target_id: Any, config: Any) -> Any:
+    target = object.__new__(TargetSpec)
+    object.__setattr__(target, "target_id", target_id)
+    object.__setattr__(target, "config", config)
+    return target
+
+
+@pytest.mark.parametrize(
+    ("target_spec", "error"),
+    [
+        (None, "spec.target_spec must be a TargetSpec"),
+        (_unsafe_target_spec("", {}), "spec.target_spec.target_id must be a non-empty string"),
+        (_unsafe_target_spec("target_x", "not_dict"), "spec.target_spec.config must be a dict"),
+    ],
+)
+def test_start_with_spec_rejects_invalid_target_spec(
+    tmp_path: Any,
+    target_spec: Any,
+    error: str,
+) -> None:
+    orch = _build_orchestrator(str(tmp_path))
+    spec = make_spec()
+    object.__setattr__(spec, "target_spec", target_spec)
+
+    with pytest.raises(ValueError, match=error):
+        orch.start(spec=spec)
