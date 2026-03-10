@@ -15,7 +15,9 @@ from optimization_control_plane.domain.enums import DispatchDecision, TrialState
 from optimization_control_plane.domain.models import (
     ExecutionRequest,
     ExperimentSpec,
+    ResolvedTarget,
     SamplerProfile,
+    validate_resolved_target,
     validate_target_spec,
 )
 from optimization_control_plane.domain.state import ResourceState, StudyRuntimeState
@@ -54,6 +56,7 @@ def _plan_and_fill(
 ) -> None:
     """Ask trials and fill execution slots up to target."""
     target_spec = validate_target_spec(spec.target_spec, source="spec.target_spec")
+    resolved_target = _resolve_target_for_experiment(target_spec, spec)
     while not stop_requested and _slots_available(study_state, request_buffer, target):
         if _should_stop_asking(study_state, max_trials, max_failures):
             break
@@ -65,7 +68,7 @@ def _plan_and_fill(
 
         params = objective_def.search_space.sample(ctx, spec)
         run_spec = objective_def.run_spec_builder.build(
-            spec.target_spec, params, spec.execution_config
+            resolved_target, params, spec.execution_config
         )
         run_key = objective_def.run_key_builder.build(run_spec, spec)
         obj_key = objective_def.objective_key_builder.build(
@@ -79,7 +82,7 @@ def _plan_and_fill(
             run_key,
             obj_key,
             profile,
-            target_spec.target_id,
+            resolved_target.target_id,
         )
 
         obj = objective_cache.get(obj_key)
@@ -175,6 +178,21 @@ def _should_stop_asking(
     if max_trials is not None and state.asked_trials >= max_trials:
         return True
     return max_failures is not None and state.failed_trials >= max_failures
+
+
+def _resolve_target_for_experiment(
+    target_spec: Any,
+    spec: ExperimentSpec,
+) -> ResolvedTarget:
+    del spec
+    # Iteration-2 compatibility path: target resolution still happens in planning.
+    resolved_target = ResolvedTarget.from_target_spec(
+        validate_target_spec(target_spec, source="spec.target_spec")
+    )
+    return validate_resolved_target(
+        resolved_target,
+        source="resolved_target",
+    )
 
 
 def _log_extra(

@@ -20,6 +20,7 @@ from optimization_control_plane.adapters.storage import (
 from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrator
 from optimization_control_plane.domain.models import (
     ExperimentSpec,
+    ResolvedTarget,
     RunResult,
     RunSpec,
     TargetSpec,
@@ -42,7 +43,7 @@ class RandomSearchSpace:
 class SimpleRunSpecBuilder:
     def build(
         self,
-        target_spec: TargetSpec,
+        resolved_target: ResolvedTarget,
         params: dict[str, Any],
         execution_config: dict[str, Any],
     ) -> RunSpec:
@@ -50,7 +51,7 @@ class SimpleRunSpecBuilder:
             kind="backtest",
             config=dict(params),
             resources=dict(execution_config.get("default_resources", {})),
-            target_spec=target_spec,
+            resolved_target=resolved_target,
         )
 
 
@@ -58,7 +59,7 @@ class DeterministicRunKeyBuilder:
     def build(self, run_spec: RunSpec, spec: ExperimentSpec) -> str:
         payload = stable_json_serialize({
             "config": run_spec.config,
-            "target_spec": run_spec.target_spec.to_dict(),
+            "resolved_target": run_spec.resolved_target.to_dict(),
             "meta": spec.meta,
         })
         return "run:" + hashlib.sha256(payload.encode()).hexdigest()[:24]
@@ -139,7 +140,7 @@ class TestRandomSamplerE2E:
         submitted = exec_be.submitted_requests()
         assert submitted
         assert all(
-            request.run_spec.target_spec.target_id == "target_backtest_v1"
+            request.run_spec.resolved_target.target_id == "target_backtest_v1"
             for request in submitted
         )
 

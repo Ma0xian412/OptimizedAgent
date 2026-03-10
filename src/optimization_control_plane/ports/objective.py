@@ -6,9 +6,9 @@ from optimization_control_plane.domain.models import (
     Checkpoint,
     ExperimentSpec,
     ObjectiveResult,
+    ResolvedTarget,
     RunResult,
     RunSpec,
-    TargetSpec,
 )
 from optimization_control_plane.ports.optimizer_backend import TrialContext
 
@@ -22,7 +22,7 @@ class SearchSpace(Protocol):
 class RunSpecBuilder(Protocol):
     def build(
         self,
-        target_spec: TargetSpec,
+        resolved_target: ResolvedTarget,
         params: dict[str, object],
         execution_config: dict[str, object],
     ) -> RunSpec: ...

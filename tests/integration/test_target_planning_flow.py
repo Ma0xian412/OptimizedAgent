@@ -92,8 +92,8 @@ def test_plan_and_fill_submitted_request_keeps_target_spec(tmp_path: Any) -> Non
 
     submitted = execution_backend.submitted_requests()
     assert len(submitted) == 1
-    assert submitted[0].run_spec.target_spec.target_id == "target_gamma"
-    assert submitted[0].run_spec.target_spec.config == {"market": "crypto"}
+    assert submitted[0].run_spec.resolved_target.target_id == "target_gamma"
+    assert submitted[0].run_spec.resolved_target.config == {"market": "crypto"}
 
 
 @pytest.mark.parametrize(

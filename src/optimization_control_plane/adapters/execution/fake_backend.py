@@ -12,7 +12,7 @@ from optimization_control_plane.domain.models import (
     ExecutionRequest,
     RunHandle,
     RunResult,
-    validate_target_spec,
+    validate_resolved_target,
 )
 
 
@@ -48,9 +48,9 @@ class FakeExecutionBackend:
     def submit(self, request: ExecutionRequest) -> RunHandle:
         if request.run_spec is None:
             raise ValueError("request.run_spec must be provided")
-        target_spec = validate_target_spec(
-            request.run_spec.target_spec,
-            source="request.run_spec.target_spec",
+        resolved_target = validate_resolved_target(
+            request.run_spec.resolved_target,
+            source="request.run_spec.resolved_target",
         )
         handle_id = f"fh_{uuid.uuid4().hex[:12]}"
         handle = RunHandle(
@@ -60,7 +60,7 @@ class FakeExecutionBackend:
         )
         self._handles[handle_id] = handle
         self._submitted_requests[handle_id] = request
-        self._submitted_targets[handle_id] = target_spec.target_id
+        self._submitted_targets[handle_id] = resolved_target.target_id
 
         script = self._scripts.get(request.run_key, self._default_script)
         if script is None:

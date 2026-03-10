@@ -1,7 +1,12 @@
 """UT-1/2/3: spec_hash, run_key, objective_key stability."""
 from __future__ import annotations
 
-from optimization_control_plane.domain.models import RunSpec, TargetSpec, compute_spec_hash
+from optimization_control_plane.domain.models import (
+    ResolvedTarget,
+    RunSpec,
+    TargetSpec,
+    compute_spec_hash,
+)
 from tests.conftest import (
     StubObjectiveKeyBuilder,
     StubRunKeyBuilder,
@@ -67,7 +72,7 @@ class TestRunKeyStability:
             kind="test",
             config={"x": 1.0},
             resources={},
-            target_spec=spec.target_spec,
+            resolved_target=ResolvedTarget.from_target_spec(spec.target_spec),
         )
         k1 = builder.build(rs, spec)
         k2 = builder.build(rs, spec)
@@ -81,7 +86,7 @@ class TestRunKeyStability:
                 kind="test",
                 config={"x": 1.0},
                 resources={},
-                target_spec=spec.target_spec,
+                resolved_target=ResolvedTarget.from_target_spec(spec.target_spec),
             ),
             spec,
         )
@@ -90,7 +95,7 @@ class TestRunKeyStability:
                 kind="test",
                 config={"x": 2.0},
                 resources={},
-                target_spec=spec.target_spec,
+                resolved_target=ResolvedTarget.from_target_spec(spec.target_spec),
             ),
             spec,
         )
@@ -104,13 +109,13 @@ class TestRunKeyStability:
             kind="test",
             config={"x": 1.0},
             resources={},
-            target_spec=spec_a.target_spec,
+            resolved_target=ResolvedTarget.from_target_spec(spec_a.target_spec),
         )
         run_spec_b = RunSpec(
             kind="test",
             config={"x": 1.0},
             resources={},
-            target_spec=spec_b.target_spec,
+            resolved_target=ResolvedTarget.from_target_spec(spec_b.target_spec),
         )
         assert builder.build(run_spec_a, spec_a) != builder.build(run_spec_b, spec_b)
 
@@ -121,13 +126,13 @@ class TestRunKeyStability:
             kind="test",
             config={"x": 1.0},
             resources={},
-            target_spec=spec.target_spec,
+            resolved_target=ResolvedTarget.from_target_spec(spec.target_spec),
         )
         run_spec_2 = RunSpec(
             kind="test",
             config={"x": 1.0},
             resources={},
-            target_spec=spec.target_spec,
+            resolved_target=ResolvedTarget.from_target_spec(spec.target_spec),
         )
         assert builder.build(run_spec_1, spec) == builder.build(run_spec_2, spec)
 
@@ -143,13 +148,13 @@ class TestRunKeyStability:
             kind="test",
             config={"x": 1.0},
             resources={},
-            target_spec=spec_a.target_spec,
+            resolved_target=ResolvedTarget.from_target_spec(spec_a.target_spec),
         )
         run_spec_b = RunSpec(
             kind="test",
             config={"x": 1.0},
             resources={},
-            target_spec=spec_b.target_spec,
+            resolved_target=ResolvedTarget.from_target_spec(spec_b.target_spec),
         )
         assert builder.build(run_spec_a, spec_a) == builder.build(run_spec_b, spec_b)
 

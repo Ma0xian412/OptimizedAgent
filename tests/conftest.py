@@ -7,6 +7,7 @@ from optimization_control_plane.domain.models import (
     Checkpoint,
     ExperimentSpec,
     ObjectiveResult,
+    ResolvedTarget,
     RunResult,
     RunSpec,
     TargetSpec,
@@ -92,7 +93,7 @@ class StubSearchSpace:
 class StubRunSpecBuilder:
     def build(
         self,
-        target_spec: TargetSpec,
+        resolved_target: ResolvedTarget,
         params: dict[str, Any],
         execution_config: dict[str, Any],
     ) -> RunSpec:
@@ -100,7 +101,7 @@ class StubRunSpecBuilder:
             kind="test",
             config=dict(params),
             resources=dict(execution_config.get("default_resources", {})),
-            target_spec=target_spec,
+            resolved_target=resolved_target,
         )
 
 
@@ -109,7 +110,7 @@ class StubRunKeyBuilder:
         payload = stable_json_serialize({
             "kind": run_spec.kind,
             "config": run_spec.config,
-            "target_spec": run_spec.target_spec.to_dict(),
+            "resolved_target": run_spec.resolved_target.to_dict(),
             "meta": spec.meta,
         })
         return "run:" + hashlib.sha256(payload.encode()).hexdigest()[:16]

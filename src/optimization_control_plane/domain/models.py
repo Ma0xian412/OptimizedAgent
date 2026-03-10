@@ -38,6 +38,41 @@ class TargetSpec:
         return hash((self.target_id, stable_json_serialize(self.config)))
 
 
+@dataclass(frozen=True)
+class ResolvedTarget:
+    target_id: str
+    config: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.target_id, str) or not self.target_id.strip():
+            raise ValueError("resolved_target.target_id must be a non-empty string")
+        if not isinstance(self.config, dict):
+            raise ValueError("resolved_target.config must be a dict")
+        object.__setattr__(self, "target_id", self.target_id.strip())
+        object.__setattr__(self, "config", dict(self.config))
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"target_id": self.target_id, "config": dict(self.config)}
+
+    @classmethod
+    def from_dict(cls, payload: dict[str, Any]) -> ResolvedTarget:
+        target_id = payload.get("target_id")
+        if not isinstance(target_id, str) or not target_id:
+            raise ValueError("resolved_target.target_id must be a non-empty string")
+        config = payload.get("config")
+        if not isinstance(config, dict):
+            raise ValueError("resolved_target.config must be a dict")
+        return cls(target_id=target_id, config=dict(config))
+
+    @classmethod
+    def from_target_spec(cls, target_spec: TargetSpec) -> ResolvedTarget:
+        validated = validate_target_spec(target_spec, source="target_spec")
+        return cls(target_id=validated.target_id, config=validated.config)
+
+    def __hash__(self) -> int:
+        return hash((self.target_id, stable_json_serialize(self.config)))
+
+
 def validate_target_spec(
     value: Any,
     *,
@@ -45,6 +80,20 @@ def validate_target_spec(
 ) -> TargetSpec:
     if not isinstance(value, TargetSpec):
         raise ValueError(f"{source} must be a TargetSpec")
+    if not isinstance(value.target_id, str) or not value.target_id.strip():
+        raise ValueError(f"{source}.target_id must be a non-empty string")
+    if not isinstance(value.config, dict):
+        raise ValueError(f"{source}.config must be a dict")
+    return value
+
+
+def validate_resolved_target(
+    value: Any,
+    *,
+    source: str = "resolved_target",
+) -> ResolvedTarget:
+    if not isinstance(value, ResolvedTarget):
+        raise ValueError(f"{source} must be a ResolvedTarget")
     if not isinstance(value.target_id, str) or not value.target_id.strip():
         raise ValueError(f"{source}.target_id must be a non-empty string")
     if not isinstance(value.config, dict):
@@ -84,7 +133,7 @@ class RunSpec:
     kind: str
     config: dict[str, Any]
     resources: dict[str, Any]
-    target_spec: TargetSpec
+    resolved_target: ResolvedTarget
 
 
 @dataclass(frozen=True)
