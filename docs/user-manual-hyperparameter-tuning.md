@@ -278,7 +278,65 @@ def score(self, checkpoint: Checkpoint, spec: ExperimentSpec) -> float | None: .
 
 ---
 
-## 5. 组装与启动
+## 5. Settings 配置示例
+
+`settings` 是传递给 `orchestrator.start(spec=..., settings=...)` 的配置字典，用于控制实验规格与运行参数。
+
+**完整示例**：
+
+```python
+my_settings = {
+    "spec_id": "my_experiment_v1",
+    "meta": {
+        "dataset_version": "ds_v1",
+        "engine_version": "e_v1",
+    },
+    "objective_config": {
+        "name": "test_loss",
+        "version": "v1",
+        "direction": "minimize",
+        "params": {},
+        "groundtruth": {"version": "gt_v1", "path": "/path/to/gt.json"},
+        "sampler": {"type": "tpe", "n_startup_trials": 5, "constant_liar": True, "seed": 42},
+        "pruner": {"type": "median", "n_startup_trials": 5, "n_warmup_steps": 0},
+    },
+    "execution_config": {
+        "executor_kind": "backtest",
+        "default_resources": {"cpu": 1},
+    },
+    "sampler": {"type": "tpe", "n_startup_trials": 5, "constant_liar": True, "seed": 42},
+    "pruner": {"type": "median", "n_startup_trials": 5, "n_warmup_steps": 0},
+    "parallelism": {"max_in_flight_trials": 4},
+    "stop": {"max_trials": 100, "max_failures": 10},
+}
+
+orchestrator.start(spec=my_spec, settings=my_settings)
+```
+
+**主要字段说明**：
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `spec_id` | ✓ | 实验唯一标识 |
+| `meta` | ✓ | 元信息（如 `dataset_version`、`engine_version`） |
+| `objective_config` | ✓ | 目标配置（含 `sampler`、`pruner` 等） |
+| `execution_config` | ✓ | 执行配置（如 `executor_kind`、`default_resources`） |
+| `sampler` | 可选 | 采样器：`random`（`seed`）、`tpe`（`n_startup_trials`、`constant_liar`、`seed`） |
+| `pruner` | 可选 | 剪枝器：`nop`（无剪枝）、`median`（`n_startup_trials`、`n_warmup_steps`） |
+| `parallelism` | 可选 | `max_in_flight_trials`：最大并行 trial 数，默认 1 |
+| `stop` | 可选 | `max_trials`：最大 trial 数；`max_failures`：最大失败次数 |
+
+**仅用 settings 启动（不传 spec）**：
+
+```python
+orchestrator.start(settings=my_settings)
+```
+
+此时 `settings` 中必须包含 `spec_id`、`meta`、`objective_config`、`execution_config`，框架会据此构建 `ExperimentSpec`。
+
+---
+
+## 6. 组装与启动
 
 将所有实现组装成 `ObjectiveDefinition` 和 `TrialOrchestrator`：
 
@@ -323,7 +381,7 @@ orchestrator.start(spec=my_spec, settings=my_settings)
 
 ---
 
-## 6. 接口清单速查
+## 7. 接口清单速查
 
 | 接口 | 必须实现 | 说明 |
 |------|----------|------|
@@ -346,7 +404,7 @@ orchestrator.start(spec=my_spec, settings=my_settings)
 
 ---
 
-## 7. 参考
+## 8. 参考
 
 - 完整 E2E 示例：`tests/e2e/test_random_sampler.py`、`tests/e2e/test_tpe_sampler.py`
 - 开发设计文档：`docs/development-guide.md`
