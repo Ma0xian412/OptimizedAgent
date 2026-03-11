@@ -209,9 +209,12 @@ python3 main.py --config /workspace/config.xml
 
 ### 10.1 单文件 loss（run loss）
 
-当前 evaluator 定义：
+当前 evaluator 基于回执明细计算四个分项：
 
-`|DoneInfo_count - GT_doneinfo_count| + |ExecutionDetail_count - GT_executiondetail_count|`
+- `curve`：成交轨迹积分误差
+- `terminal`：终止成交比例误差
+- `cancel`：撤单成功分类误差
+- `post`：撤单后成交量误差
 
 ### 10.2 trial 聚合 loss（port + adapter）
 

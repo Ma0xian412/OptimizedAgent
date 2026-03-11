@@ -43,10 +43,10 @@ def test_runner_outputs_result_details_and_metrics_match_row_counts(monkeypatch:
     assert diagnostics_result["executiondetail_rows"][0]["ExchTick"] == 13
     assert diagnostics_result["cancelrequest_rows"][0]["CancelSentTime"] == 30
 
-    assert result.metrics["orderinfo_count"] == len(diagnostics_result["orderinfo_rows"])
-    assert result.metrics["doneinfo_count"] == len(diagnostics_result["doneinfo_rows"])
-    assert result.metrics["executiondetail_count"] == len(diagnostics_result["executiondetail_rows"])
-    assert result.metrics["cancelrequest_count"] == len(diagnostics_result["cancelrequest_rows"])
+    assert "orderinfo_count" not in result.metrics
+    assert "doneinfo_count" not in result.metrics
+    assert "executiondetail_count" not in result.metrics
+    assert "cancelrequest_count" not in result.metrics
 
 
 def test_runner_raises_on_empty_done_and_execution(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -50,14 +50,7 @@ class BackTestSysRunner:
         execution_count = len(raw_result.ExecutionDetail)
         if done_count + execution_count == 0:
             raise ValueError("backtest result is empty: DoneInfo and ExecutionDetail are both zero")
-        order_count = len(raw_result.OrderInfo)
-        cancel_count = len(raw_result.CancelRequest)
-        metrics = {
-            "doneinfo_count": done_count,
-            "executiondetail_count": execution_count,
-            "orderinfo_count": order_count,
-            "cancelrequest_count": cancel_count,
-        }
+        metrics: dict[str, Any] = {}
         self._merge_portfolio_metrics(metrics, app.last_context)
         diagnostics = {
             "run_key": request.run_key,
