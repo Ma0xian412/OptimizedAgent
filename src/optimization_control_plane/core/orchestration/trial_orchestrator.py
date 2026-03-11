@@ -313,22 +313,14 @@ class TrialOrchestrator:
         return spec
 
     def _build_spec_from_settings(self, settings: dict[str, Any]) -> ExperimentSpec:
-        payload = self._read_spec_payload(settings)
-        missing = [key for key in _SPEC_SETTINGS_KEYS if key not in payload]
-        if missing:
-            raise ValueError(
-                "settings must include spec fields to construct ExperimentSpec: "
-                f"missing={missing}"
-            )
-
-        spec_id = payload["spec_id"]
+        spec_id = settings["spec_id"]
         if not isinstance(spec_id, str) or not spec_id:
             raise ValueError("settings spec_id must be a non-empty string")
-        meta = self._read_required_dict(payload, "meta")
-        objective_config = self._augment_objective_config(payload, settings)
-        execution_config = self._read_required_dict(payload, "execution_config")
+        meta = self._read_required_dict(settings, "meta")
+        objective_config = self._augment_objective_config(settings, settings)
+        execution_config = self._read_required_dict(settings, "execution_config")
         computed_hash = compute_spec_hash(spec_id, meta, objective_config, execution_config)
-        provided_hash = payload.get("spec_hash")
+        provided_hash = settings.get("spec_hash")
         if provided_hash is not None and provided_hash != computed_hash:
             raise ValueError(
                 "settings provided spec_hash does not match computed spec_hash: "
