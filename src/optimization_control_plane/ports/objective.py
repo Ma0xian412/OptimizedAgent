@@ -22,12 +22,22 @@ class SearchSpace(Protocol):
 class RunSpecBuilder(Protocol):
     """Build an executable run specification from sampled parameters."""
 
-    def build(self, params: dict[str, object], spec: ExperimentSpec) -> RunSpec: ...
+    def build(
+        self,
+        params: dict[str, object],
+        spec: ExperimentSpec,
+        dataset_id: str,
+    ) -> RunSpec: ...
 
 
 @runtime_checkable
 class RunKeyBuilder(Protocol):
-    def build(self, run_spec: RunSpec, spec: ExperimentSpec) -> str: ...
+    def build(
+        self,
+        run_spec: RunSpec,
+        spec: ExperimentSpec,
+        dataset_id: str,
+    ) -> str: ...
 
 
 @runtime_checkable
@@ -47,4 +57,15 @@ class ObjectiveEvaluator(Protocol):
         run_result: RunResult,
         spec: ExperimentSpec,
         groundtruth: GroundTruthData,
+    ) -> ObjectiveResult: ...
+
+
+@runtime_checkable
+class TrialResultAggregator(Protocol):
+    """Aggregate per-dataset objective results into one trial objective."""
+
+    def aggregate(
+        self,
+        results: list[tuple[str, ObjectiveResult]],
+        spec: ExperimentSpec,
     ) -> ObjectiveResult: ...

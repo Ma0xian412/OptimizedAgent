@@ -1,7 +1,9 @@
 from optimization_control_plane.core.orchestration.inflight_registry import (
     InflightEntry,
     InflightRegistry,
-    TrialBinding,
+    RunBinding,
+    TrialCohort,
+    TrialRunFailure,
 )
 from optimization_control_plane.core.orchestration.trial_orchestrator import (
     TrialOrchestrator,
@@ -10,6 +12,8 @@ from optimization_control_plane.core.orchestration.trial_orchestrator import (
 __all__ = [
     "InflightEntry",
     "InflightRegistry",
-    "TrialBinding",
+    "RunBinding",
+    "TrialCohort",
+    "TrialRunFailure",
     "TrialOrchestrator",
 ]

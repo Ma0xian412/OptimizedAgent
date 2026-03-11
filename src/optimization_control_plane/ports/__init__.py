@@ -1,4 +1,5 @@
 from optimization_control_plane.ports.cache import ObjectiveCache, RunCache
+from optimization_control_plane.ports.dataset import DatasetEnumerator
 from optimization_control_plane.ports.execution_backend import ExecutionBackend
 from optimization_control_plane.ports.groundtruth import GroundTruthProvider
 from optimization_control_plane.ports.objective import (
@@ -8,6 +9,7 @@ from optimization_control_plane.ports.objective import (
     RunKeyBuilder,
     RunSpecBuilder,
     SearchSpace,
+    TrialResultAggregator,
 )
 from optimization_control_plane.ports.optimizer_backend import (
     OptimizerBackend,
@@ -18,6 +20,7 @@ from optimization_control_plane.ports.result_store import ResultStore
 
 __all__ = [
     "DispatchPolicy",
+    "DatasetEnumerator",
     "ExecutionBackend",
     "GroundTruthProvider",
     "ObjectiveCache",
@@ -32,4 +35,5 @@ __all__ = [
     "RunSpecBuilder",
     "SearchSpace",
     "TrialContext",
+    "TrialResultAggregator",
 ]

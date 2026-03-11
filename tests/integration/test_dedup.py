@@ -18,12 +18,14 @@ from optimization_control_plane.adapters.storage import (
 from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrator
 from optimization_control_plane.domain.models import RunResult
 from tests.conftest import (
+    StubDatasetEnumerator,
     StubGroundTruthProvider,
     StubObjectiveEvaluator,
     StubObjectiveKeyBuilder,
     StubRunKeyBuilder,
     StubRunSpecBuilder,
     StubSearchSpace,
+    StubTrialResultAggregator,
     make_settings,
     make_spec,
 )
@@ -43,9 +45,11 @@ class TestDedup:
 
         obj_def = ObjectiveDefinition(
             search_space=StubSearchSpace({"x": 1.0}),
+            dataset_enumerator=StubDatasetEnumerator(),
             run_spec_builder=StubRunSpecBuilder(),
             run_key_builder=StubRunKeyBuilder(),
             objective_key_builder=StubObjectiveKeyBuilder(),
+            trial_result_aggregator=StubTrialResultAggregator(),
             progress_scorer=None,
             objective_evaluator=StubObjectiveEvaluator(),
         )

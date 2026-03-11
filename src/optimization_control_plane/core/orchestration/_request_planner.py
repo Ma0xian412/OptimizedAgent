@@ -1,22 +1,29 @@
 """Request planning logic extracted from TrialOrchestrator."""
 from __future__ import annotations
 
-import logging
 import uuid
-from typing import Any
 
 from optimization_control_plane.core.objective_definition import ObjectiveDefinition
 from optimization_control_plane.core.orchestration._metrics import Metrics
+from optimization_control_plane.core.orchestration._run_binding_factory import (
+    build_bindings,
+    enumerate_dataset_ids,
+)
 from optimization_control_plane.core.orchestration.inflight_registry import (
     InflightRegistry,
-    TrialBinding,
+    RunBinding,
+    TrialCohort,
+)
+from optimization_control_plane.core.orchestration._trial_utils import (
+    build_trial_objective_key,
+    with_shared_run_attrs,
 )
 from optimization_control_plane.domain.enums import DispatchDecision, TrialState
 from optimization_control_plane.domain.models import (
     ExecutionRequest,
     ExperimentSpec,
     GroundTruthData,
-    RunSpec,
+    ObjectiveResult,
     SamplerProfile,
 )
 from optimization_control_plane.domain.state import ResourceState, StudyRuntimeState
@@ -26,9 +33,7 @@ from optimization_control_plane.ports.optimizer_backend import OptimizerBackend
 from optimization_control_plane.ports.policies import DispatchPolicy
 from optimization_control_plane.ports.result_store import ResultStore
 
-logger = logging.getLogger(__name__)
-
-RequestBufferItem = tuple[ExecutionRequest, TrialBinding]
+RequestBufferItem = tuple[ExecutionRequest, RunBinding]
 
 
 def _plan_and_fill(
@@ -54,177 +59,215 @@ def _plan_and_fill(
     max_trials: int | None,
     max_failures: int | None,
 ) -> None:
-    """Ask trials and fill execution slots up to target."""
     while not stop_requested and _slots_available(study_state, request_buffer, target):
         if _should_stop_asking(study_state, max_trials, max_failures):
-            break
-
+            return
         trial = backend.ask(study_id)
         study_state.asked_trials += 1
         metrics.inc("trials_asked_total")
-        ctx = backend.open_trial_context(study_id, trial.trial_id)
-
-        params = objective_def.search_space.sample(ctx, spec)
-        run_spec = objective_def.run_spec_builder.build(params, spec)
-        _validate_run_spec(run_spec)
-        run_key = objective_def.run_key_builder.build(run_spec, spec)
-        raw_obj_key = objective_def.objective_key_builder.build(
-            run_key, spec.objective_config
+        trial_ctx = backend.open_trial_context(study_id, trial.trial_id)
+        params = objective_def.search_space.sample(trial_ctx, spec)
+        dataset_ids = enumerate_dataset_ids(objective_def, spec)
+        trial_objective_key = build_trial_objective_key(
+            params=params,
+            dataset_ids=dataset_ids,
+            spec=spec,
+            groundtruth_fingerprint=groundtruth.fingerprint,
         )
-        obj_key = _scope_objective_key(raw_obj_key, groundtruth.fingerprint)
-
-        log_extra = _log_extra(study_id, trial.trial_id, trial.number, run_key, obj_key, profile)
-
-        obj = objective_cache.get(obj_key)
-        if obj is not None:
+        cached_trial_obj = objective_cache.get(trial_objective_key)
+        if cached_trial_obj is not None:
+            _tell_complete_trial(
+                backend=backend,
+                result_store=result_store,
+                study_id=study_id,
+                trial_id=trial.trial_id,
+                objective_result=cached_trial_obj,
+            )
+            study_state.completed_trials += 1
+            metrics.inc("trials_completed_total")
             metrics.inc("objective_cache_hit_total")
-            result_store.write_trial_result(trial.trial_id, obj)
-            backend.tell(study_id, trial.trial_id, TrialState.COMPLETE, obj.value, obj.attrs)
-            study_state.completed_trials += 1
-            metrics.inc("trials_completed_total")
-            logger.info("objective cache hit", extra=log_extra)
             continue
 
-        run_result = run_cache.get(run_key)
-        if run_result is not None:
-            metrics.inc("run_cache_hit_total")
-            obj = objective_def.objective_evaluator.evaluate(run_result, spec, groundtruth)
-            objective_cache.put(obj_key, obj)
-            result_store.write_trial_result(trial.trial_id, obj)
-            backend.tell(study_id, trial.trial_id, TrialState.COMPLETE, obj.value, obj.attrs)
-            study_state.completed_trials += 1
-            metrics.inc("trials_completed_total")
-            logger.info("run cache hit", extra=log_extra)
-            continue
-
-        binding = TrialBinding(
+        bindings = build_bindings(
+            objective_def=objective_def,
+            spec=spec,
+            groundtruth=groundtruth,
+            params=params,
+            dataset_ids=dataset_ids,
             trial_id=trial.trial_id,
             trial_number=trial.number,
-            objective_key=obj_key,
-            trial_ctx=ctx,
+            trial_objective_key=trial_objective_key,
+            trial_ctx=trial_ctx,
         )
-
-        if inflight_registry.has(run_key):
-            inflight_registry.attach_follower(run_key, binding)
-            study_state.attached_follower_trials += 1
-            logger.info("attached as follower", extra=log_extra)
-            continue
-
-        request = ExecutionRequest(
-            request_id=f"req_{uuid.uuid4().hex[:12]}",
-            trial_id=trial.trial_id,
-            run_key=run_key,
-            objective_key=obj_key,
-            cohort_id=None,
-            priority=0,
-            run_spec=run_spec,
-        )
-
-        decision = dispatch_policy.classify(request, profile, study_state, resource_state)
-        if decision == DispatchDecision.SUBMIT_NOW:
-            _submit_leader(
-                execution_backend, inflight_registry, study_state, metrics,
-                request, binding, run_key, log_extra,
+        inflight_registry.register_trial_cohort(
+            TrialCohort(
+                trial_id=trial.trial_id,
+                trial_number=trial.number,
+                trial_ctx=trial_ctx,
+                trial_objective_key=trial_objective_key,
+                run_bindings=bindings,
             )
-        else:
-            request_buffer.append((request, binding))
-            study_state.buffered_requests += 1
-            logger.info("request buffered", extra=log_extra)
+        )
+        _plan_trial_bindings(
+            study_id=study_id,
+            spec=spec,
+            groundtruth=groundtruth,
+            profile=profile,
+            objective_def=objective_def,
+            backend=backend,
+            execution_backend=execution_backend,
+            dispatch_policy=dispatch_policy,
+            run_cache=run_cache,
+            objective_cache=objective_cache,
+            result_store=result_store,
+            inflight_registry=inflight_registry,
+            study_state=study_state,
+            resource_state=resource_state,
+            request_buffer=request_buffer,
+            metrics=metrics,
+            bindings=bindings,
+        )
 
 
-def _submit_leader(
+def _plan_trial_bindings(
+    *,
+    study_id: str,
+    spec: ExperimentSpec,
+    groundtruth: GroundTruthData,
+    profile: SamplerProfile,
+    objective_def: ObjectiveDefinition,
+    backend: OptimizerBackend,
     execution_backend: ExecutionBackend,
+    dispatch_policy: DispatchPolicy,
+    run_cache: RunCache,
+    objective_cache: ObjectiveCache,
+    result_store: ResultStore,
     inflight_registry: InflightRegistry,
     study_state: StudyRuntimeState,
+    resource_state: ResourceState,
+    request_buffer: list[RequestBufferItem],
     metrics: Metrics,
-    request: ExecutionRequest,
-    binding: TrialBinding,
-    run_key: str,
-    log_extra: dict[str, Any],
+    bindings: tuple[RunBinding, ...],
 ) -> None:
-    handle = execution_backend.submit(request)
-    inflight_registry.register_leader(run_key, handle, binding)
-    study_state.active_executions += 1
-    metrics.inc("execution_submitted_total")
-    logger.info(
-        "submitted execution",
-        extra={**log_extra, "handle_id": handle.handle_id, "request_id": request.request_id},
+    for binding in bindings:
+        cached_run_obj = objective_cache.get(binding.per_run_objective_key)
+        if cached_run_obj is not None:
+            objective_cache.put(binding.per_run_objective_key, cached_run_obj)
+            inflight_registry.record_run_complete(
+                trial_id=binding.trial_id,
+                run_key=binding.run_key,
+                dataset_id=binding.dataset_id,
+                objective_result=cached_run_obj,
+            )
+            metrics.inc("objective_cache_hit_per_run_total")
+            continue
+
+        run_result = run_cache.get(binding.run_key)
+        if run_result is not None:
+            evaluated = objective_def.objective_evaluator.evaluate(run_result, spec, groundtruth)
+            objective_cache.put(binding.per_run_objective_key, evaluated)
+            inflight_registry.record_run_complete(
+                trial_id=binding.trial_id,
+                run_key=binding.run_key,
+                dataset_id=binding.dataset_id,
+                objective_result=evaluated,
+            )
+            metrics.inc("run_cache_hit_total")
+            continue
+
+        if inflight_registry.has(binding.run_key):
+            inflight_registry.attach_follower(binding.run_key, binding)
+            study_state.attached_follower_trials += 1
+            continue
+        request = ExecutionRequest(
+            request_id=f"req_{uuid.uuid4().hex[:12]}",
+            trial_id=binding.trial_id,
+            run_key=binding.run_key,
+            objective_key=binding.per_run_objective_key,
+            cohort_id=binding.trial_id,
+            priority=0,
+            run_spec=binding.run_spec,
+        )
+        decision = dispatch_policy.classify(request, profile, study_state, resource_state)
+        if decision == DispatchDecision.SUBMIT_NOW:
+            handle = execution_backend.submit(request)
+            inflight_registry.register_leader(binding.run_key, handle, binding)
+            study_state.active_executions += 1
+            metrics.inc("execution_submitted_total")
+            continue
+        request_buffer.append((request, binding))
+        study_state.buffered_requests += 1
+
+    _try_finalize_ready_trial(
+        study_id=study_id,
+        spec=spec,
+        objective_def=objective_def,
+        objective_cache=objective_cache,
+        result_store=result_store,
+        backend=backend,
+        inflight_registry=inflight_registry,
+        study_state=study_state,
+        metrics=metrics,
+        trial_id=bindings[0].trial_id,
     )
 
 
-def _validate_run_spec(run_spec: RunSpec) -> None:
-    command = run_spec.job.command
-    script_path = run_spec.job.script_path
-    has_command = command is not None and len(command) > 0
-    has_script = script_path is not None and script_path.strip() != ""
-    if has_command == has_script:
-        raise ValueError("run_spec.job must set exactly one of command or script_path")
-
-    if has_command:
-        assert command is not None
-        if any((not isinstance(part, str) or part == "") for part in command):
-            raise ValueError("run_spec.job.command must contain non-empty strings")
-    if has_script:
-        assert script_path is not None
-        if not isinstance(script_path, str) or script_path.strip() == "":
-            raise ValueError("run_spec.job.script_path must be a non-empty string")
-    if run_spec.job.working_dir is not None and run_spec.job.working_dir.strip() == "":
-        raise ValueError("run_spec.job.working_dir must be non-empty when provided")
-
-    for key, value in run_spec.job.env.items():
-        if (
-            not isinstance(key, str)
-            or not isinstance(value, str)
-            or key == ""
-            or value == ""
-        ):
-            raise ValueError("run_spec.job.env keys and values must be non-empty strings")
-
-    for name, amount in (
-        ("cpu_cores", run_spec.resource_request.cpu_cores),
-        ("memory_mb", run_spec.resource_request.memory_mb),
-        ("gpu_count", run_spec.resource_request.gpu_count),
-        ("max_runtime_seconds", run_spec.resource_request.max_runtime_seconds),
-    ):
-        if amount is not None and amount <= 0:
-            raise ValueError(f"run_spec.resource_request.{name} must be > 0 when provided")
+def _try_finalize_ready_trial(
+    *,
+    study_id: str,
+    spec: ExperimentSpec,
+    objective_def: ObjectiveDefinition,
+    objective_cache: ObjectiveCache,
+    result_store: ResultStore,
+    backend: OptimizerBackend,
+    inflight_registry: InflightRegistry,
+    study_state: StudyRuntimeState,
+    metrics: Metrics,
+    trial_id: str,
+) -> None:
+    cohort = inflight_registry.get_trial_cohort(trial_id)
+    if cohort is None or not cohort.is_complete:
+        return
+    finished = inflight_registry.pop_trial_cohort(trial_id)
+    if finished is None:
+        return
+    aggregated = objective_def.trial_result_aggregator.aggregate(finished.successful_results, spec)
+    final_result = with_shared_run_attrs(aggregated, finished.shared_run_leader_trial_ids)
+    objective_cache.put(finished.trial_objective_key, final_result)
+    _tell_complete_trial(
+        backend=backend,
+        result_store=result_store,
+        study_id=study_id,
+        trial_id=finished.trial_id,
+        objective_result=final_result,
+    )
+    study_state.completed_trials += 1
+    metrics.inc("trials_completed_total")
 
 
-def _slots_available(
-    state: StudyRuntimeState,
-    buffer: list[RequestBufferItem],
-    target: int,
-) -> bool:
+def _tell_complete_trial(
+    *,
+    backend: OptimizerBackend,
+    result_store: ResultStore,
+    study_id: str,
+    trial_id: str,
+    objective_result: ObjectiveResult,
+) -> None:
+    result_store.write_trial_result(trial_id, objective_result)
+    backend.tell(
+        study_id=study_id,
+        trial_id=trial_id,
+        state=TrialState.COMPLETE,
+        value=objective_result.value,
+        attrs=objective_result.attrs,
+    )
+
+
+def _slots_available(state: StudyRuntimeState, buffer: list[RequestBufferItem], target: int) -> bool:
     return (state.active_executions + len(buffer)) < target
 
 
-def _should_stop_asking(
-    state: StudyRuntimeState,
-    max_trials: int | None,
-    max_failures: int | None,
-) -> bool:
+def _should_stop_asking(state: StudyRuntimeState, max_trials: int | None, max_failures: int | None) -> bool:
     if max_trials is not None and state.asked_trials >= max_trials:
         return True
     return max_failures is not None and state.failed_trials >= max_failures
-
-
-def _log_extra(
-    study_id: str,
-    trial_id: str,
-    trial_number: int,
-    run_key: str,
-    objective_key: str,
-    profile: SamplerProfile,
-) -> dict[str, Any]:
-    return {
-        "study_id": study_id,
-        "trial_id": trial_id,
-        "trial_number": trial_number,
-        "run_key": run_key,
-        "objective_key": objective_key,
-        "sampling_mode": profile.mode.value,
-    }
-
-
-def _scope_objective_key(raw_key: str, groundtruth_fingerprint: str) -> str:
-    return f"{raw_key}::gt={groundtruth_fingerprint}"

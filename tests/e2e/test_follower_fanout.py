@@ -21,12 +21,14 @@ from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrat
 from optimization_control_plane.domain.enums import EventKind
 from optimization_control_plane.domain.models import RunResult
 from tests.conftest import (
+    StubDatasetEnumerator,
     StubGroundTruthProvider,
     StubObjectiveEvaluator,
     StubObjectiveKeyBuilder,
     StubRunKeyBuilder,
     StubRunSpecBuilder,
     StubSearchSpace,
+    StubTrialResultAggregator,
     make_settings,
     make_spec,
 )
@@ -52,9 +54,11 @@ def _make_orchestrator(
 
     obj_def = ObjectiveDefinition(
         search_space=StubSearchSpace({"x": 1.0}),
+        dataset_enumerator=StubDatasetEnumerator(),
         run_spec_builder=StubRunSpecBuilder(),
         run_key_builder=StubRunKeyBuilder(),
         objective_key_builder=StubObjectiveKeyBuilder(),
+        trial_result_aggregator=StubTrialResultAggregator(),
         progress_scorer=progress_scorer,
         objective_evaluator=StubObjectiveEvaluator(),
     )
@@ -97,7 +101,7 @@ class TestLeaderCompleteFollowerFanout:
         assert len(records) == 5
         assert any(record["attrs"].get("shared_run") is True for record in records)
         assert any(
-            record["attrs"].get("shared_run_leader_trial_id") is not None
+            record["attrs"].get("shared_run_leader_trial_ids")
             for record in records
             if record["attrs"].get("shared_run") is True
         )
