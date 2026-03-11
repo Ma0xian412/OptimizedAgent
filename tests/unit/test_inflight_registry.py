@@ -21,7 +21,7 @@ def _binding(trial_id: str, run_key: str, dataset_id: str, number: int = 0) -> R
         run_key=run_key,
         per_run_objective_key=f"obj:{trial_id}:{dataset_id}",
         trial_objective_key=f"trial:{trial_id}",
-        run_spec=RunSpec(job=Job(command=["python"])),
+        run_spec=RunSpec(job=Job(command=["python"]), result_path=f"/tmp/{run_key}.json"),
         trial_ctx=FakeCtx(),
     )
 

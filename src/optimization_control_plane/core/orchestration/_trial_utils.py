@@ -21,6 +21,8 @@ def validate_run_spec(run_spec: RunSpec) -> None:
         raise ValueError("run_spec.job.command must contain non-empty strings")
     if has_script and (not isinstance(script_path, str) or script_path.strip() == ""):
         raise ValueError("run_spec.job.script_path must be a non-empty string")
+    if not isinstance(run_spec.result_path, str) or run_spec.result_path.strip() == "":
+        raise ValueError("run_spec.result_path must be a non-empty string")
     if run_spec.job.working_dir is not None and run_spec.job.working_dir.strip() == "":
         raise ValueError("run_spec.job.working_dir must be non-empty when provided")
     for key, value in run_spec.job.env.items():

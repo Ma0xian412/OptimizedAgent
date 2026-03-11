@@ -32,6 +32,7 @@ from optimization_control_plane.ports.groundtruth import GroundTruthProvider
 from optimization_control_plane.ports.optimizer_backend import OptimizerBackend
 from optimization_control_plane.ports.policies import DispatchPolicy, ParallelismPolicy
 from optimization_control_plane.ports.result_store import ResultStore
+from optimization_control_plane.ports.run_result_loader import RunResultLoader
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class TrialOrchestrator:
         execution_backend: ExecutionBackend,
         parallelism_policy: ParallelismPolicy,
         dispatch_policy: DispatchPolicy,
+        run_result_loader: RunResultLoader,
         run_cache: RunCache,
         objective_cache: ObjectiveCache,
         result_store: ResultStore,
@@ -58,6 +60,7 @@ class TrialOrchestrator:
         self._execution_backend = execution_backend
         self._parallelism_policy = parallelism_policy
         self._dispatch_policy = dispatch_policy
+        self._run_result_loader = run_result_loader
         self._run_cache = run_cache
         self._objective_cache = objective_cache
         self._result_store = result_store
@@ -206,6 +209,7 @@ class TrialOrchestrator:
             objective_def=self._objective_def,
             backend=self._backend,
             execution_backend=self._execution_backend,
+            run_result_loader=self._run_result_loader,
             run_cache=self._run_cache,
             objective_cache=self._objective_cache,
             result_store=self._result_store,

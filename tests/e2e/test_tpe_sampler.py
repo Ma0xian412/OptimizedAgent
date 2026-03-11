@@ -13,6 +13,7 @@ from optimization_control_plane.adapters.policies import (
 )
 from optimization_control_plane.adapters.storage import (
     FileObjectiveCache,
+    FileRunResultLoader,
     FileResultStore,
     FileRunCache,
 )
@@ -45,11 +46,13 @@ class TPESearchSpace:
 
 class SimpleRunSpecBuilder:
     def build(self, params: dict[str, Any], spec: ExperimentSpec, dataset_id: str) -> RunSpec:
+        result_dir = str(spec.execution_config.get("result_base_dir", "/tmp/ocp_results"))
         return RunSpec(
             job=Job(
                 command=["python", "backtest.py"],
                 args=[f"--{k}={params[k]}" for k in sorted(params)] + [f"--dataset={dataset_id}"],
-            )
+            ),
+            result_path=f"{result_dir}/{spec.spec_id}/{dataset_id}.json",
         )
 
 
@@ -101,6 +104,7 @@ class TestTPESamplerE2E:
             execution_backend=exec_be,
             parallelism_policy=AsyncFillParallelismPolicy(),
             dispatch_policy=SubmitNowDispatchPolicy(),
+            run_result_loader=FileRunResultLoader(),
             run_cache=FileRunCache(os.path.join(str(tmp_path), "data")),
             objective_cache=FileObjectiveCache(os.path.join(str(tmp_path), "data")),
             result_store=FileResultStore(os.path.join(str(tmp_path), "data")),
