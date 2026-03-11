@@ -27,9 +27,11 @@ from optimization_control_plane.domain.models import (
 )
 from optimization_control_plane.ports.optimizer_backend import TrialContext
 from tests.conftest import (
+    StubDatasetEnumerator,
     StubGroundTruthProvider,
     StubObjectiveEvaluator,
     StubObjectiveKeyBuilder,
+    StubTrialResultAggregator,
     make_settings,
 )
 
@@ -42,17 +44,17 @@ class TPESearchSpace:
 
 
 class SimpleRunSpecBuilder:
-    def build(self, params: dict[str, Any], spec: ExperimentSpec) -> RunSpec:
+    def build(self, params: dict[str, Any], spec: ExperimentSpec, dataset_id: str) -> RunSpec:
         return RunSpec(
             job=Job(
                 command=["python", "backtest.py"],
-                args=[f"--{k}={params[k]}" for k in sorted(params)],
+                args=[f"--{k}={params[k]}" for k in sorted(params)] + [f"--dataset={dataset_id}"],
             )
         )
 
 
 class DeterministicRunKeyBuilder:
-    def build(self, run_spec: RunSpec, spec: ExperimentSpec) -> str:
+    def build(self, run_spec: RunSpec, spec: ExperimentSpec, dataset_id: str) -> str:
         payload = stable_json_serialize({
             "job": {
                 "command": run_spec.job.command,
@@ -62,6 +64,7 @@ class DeterministicRunKeyBuilder:
                 "working_dir": run_spec.job.working_dir,
             },
             "meta": spec.meta,
+            "dataset_id": dataset_id,
         })
         return "run:" + hashlib.sha256(payload.encode()).hexdigest()[:24]
 
@@ -82,9 +85,11 @@ class TestTPESamplerE2E:
 
         obj_def = ObjectiveDefinition(
             search_space=TPESearchSpace(),
+            dataset_enumerator=StubDatasetEnumerator(),
             run_spec_builder=SimpleRunSpecBuilder(),
             run_key_builder=DeterministicRunKeyBuilder(),
             objective_key_builder=StubObjectiveKeyBuilder(),
+            trial_result_aggregator=StubTrialResultAggregator(),
             progress_scorer=None,
             objective_evaluator=StubObjectiveEvaluator(),
         )

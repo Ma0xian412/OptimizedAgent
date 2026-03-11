@@ -2,7 +2,9 @@ from optimization_control_plane.core.objective_definition import ObjectiveDefini
 from optimization_control_plane.core.orchestration.inflight_registry import (
     InflightEntry,
     InflightRegistry,
-    TrialBinding,
+    RunBinding,
+    TrialCohort,
+    TrialRunFailure,
 )
 from optimization_control_plane.core.orchestration.trial_orchestrator import (
     TrialOrchestrator,
@@ -12,6 +14,8 @@ __all__ = [
     "InflightEntry",
     "InflightRegistry",
     "ObjectiveDefinition",
-    "TrialBinding",
+    "RunBinding",
+    "TrialCohort",
+    "TrialRunFailure",
     "TrialOrchestrator",
 ]

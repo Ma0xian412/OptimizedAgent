@@ -81,7 +81,12 @@ class StubSearchSpace:
 
 
 class StubRunSpecBuilder:
-    def build(self, params: dict[str, Any], spec: ExperimentSpec) -> RunSpec:
+    def build(
+        self,
+        params: dict[str, Any],
+        spec: ExperimentSpec,
+        dataset_id: str,
+    ) -> RunSpec:
         default_resources = spec.execution_config.get("default_resources", {})
         cpu = default_resources.get("cpu")
         memory_mb = default_resources.get("memory_mb")
@@ -91,7 +96,7 @@ class StubRunSpecBuilder:
         return RunSpec(
             job=Job(
                 command=["python", "runner.py"],
-                args=[f"--{k}={params[k]}" for k in sorted(params)],
+                args=[f"--{k}={params[k]}" for k in sorted(params)] + [f"--dataset={dataset_id}"],
             ),
             resource_request=ResourceRequest(
                 cpu_cores=cpu if isinstance(cpu, int) else None,
@@ -101,7 +106,7 @@ class StubRunSpecBuilder:
 
 
 class StubRunKeyBuilder:
-    def build(self, run_spec: RunSpec, spec: ExperimentSpec) -> str:
+    def build(self, run_spec: RunSpec, spec: ExperimentSpec, dataset_id: str) -> str:
         payload = stable_json_serialize({
             "job": {
                 "command": run_spec.job.command,
@@ -117,6 +122,7 @@ class StubRunKeyBuilder:
                 "max_runtime_seconds": run_spec.resource_request.max_runtime_seconds,
             },
             "meta": spec.meta,
+            "dataset_id": dataset_id,
         })
         return "run:" + hashlib.sha256(payload.encode()).hexdigest()[:16]
 
@@ -167,3 +173,35 @@ class StubGroundTruthProvider:
         payload = stable_json_serialize(groundtruth)
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
         return GroundTruthData(payload=groundtruth, fingerprint=f"sha256:{digest}")
+
+    def load_for_dataset(self, spec: ExperimentSpec, dataset_id: str) -> GroundTruthData:
+        return self.load(spec)
+
+
+class StubDatasetEnumerator:
+    def __init__(self, dataset_ids: tuple[str, ...] | None = None) -> None:
+        self._dataset_ids = dataset_ids
+
+    def enumerate(self, spec: ExperimentSpec) -> tuple[str, ...]:
+        if self._dataset_ids is not None:
+            return self._dataset_ids
+        dataset_ids = spec.meta.get("dataset_ids")
+        if isinstance(dataset_ids, (list, tuple)):
+            return tuple(str(dataset_id) for dataset_id in dataset_ids)
+        dataset_version = spec.meta.get("dataset_version", "default")
+        return (str(dataset_version),)
+
+
+class StubTrialResultAggregator:
+    def aggregate(
+        self,
+        results: list[tuple[str, ObjectiveResult]],
+        spec: ExperimentSpec,
+    ) -> ObjectiveResult:
+        if not results:
+            raise ValueError("cannot aggregate empty results")
+        if len(results) == 1:
+            return results[0][1]
+        total = sum(result.value for _, result in results)
+        attrs = {"aggregated_dataset_count": len(results)}
+        return ObjectiveResult(value=total / len(results), attrs=attrs, artifact_refs=[])

@@ -31,15 +31,15 @@ class TestRunKeyStability:
         builder = StubRunKeyBuilder()
         spec = make_spec()
         rs = RunSpec(job=Job(command=["python"], args=["--x=1.0"]))
-        k1 = builder.build(rs, spec)
-        k2 = builder.build(rs, spec)
+        k1 = builder.build(rs, spec, "ds_v1")
+        k2 = builder.build(rs, spec, "ds_v1")
         assert k1 == k2
 
     def test_different_config_different_key(self) -> None:
         builder = StubRunKeyBuilder()
         spec = make_spec()
-        k1 = builder.build(RunSpec(job=Job(command=["python"], args=["--x=1.0"])), spec)
-        k2 = builder.build(RunSpec(job=Job(command=["python"], args=["--x=2.0"])), spec)
+        k1 = builder.build(RunSpec(job=Job(command=["python"], args=["--x=1.0"])), spec, "ds_v1")
+        k2 = builder.build(RunSpec(job=Job(command=["python"], args=["--x=2.0"])), spec, "ds_v1")
         assert k1 != k2
 
 
