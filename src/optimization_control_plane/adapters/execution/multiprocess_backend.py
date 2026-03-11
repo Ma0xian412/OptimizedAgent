@@ -2,9 +2,9 @@
 
 Job stdout protocol (optional):
 - __OCP_CHECKPOINT__{"step":N,"metrics":{...}}  → CHECKPOINT event
-- __OCP_RESULT__{"metrics":{...},"diagnostics":{...},"artifact_refs":[]}  → COMPLETED event
 
-If neither prefix is used: exit 0 → COMPLETED with default RunResult; exit !=0 → FAILED.
+Result payload is exchanged through filesystem path declared in RunSpec.
+Backend only emits lifecycle status events.
 """
 from __future__ import annotations
 
@@ -26,11 +26,9 @@ from optimization_control_plane.domain.models import (
     ExecutionRequest,
     Job,
     RunHandle,
-    RunResult,
 )
 
 CHECKPOINT_PREFIX = "__OCP_CHECKPOINT__"
-RESULT_PREFIX = "__OCP_RESULT__"
 
 
 def _build_argv(job: Job) -> list[str]:
@@ -86,8 +84,6 @@ def _run_worker(handle_id: str, request: ExecutionRequest, event_queue: Queue[tu
         return
 
     last_step = -1
-    result_emitted = False
-
     try:
         assert proc.stdout is not None
         for line_bytes in proc.stdout:
@@ -109,30 +105,6 @@ def _run_worker(handle_id: str, request: ExecutionRequest, event_queue: Queue[tu
                         )))
                 except (json.JSONDecodeError, TypeError, ValueError):
                     pass
-            elif line.startswith(RESULT_PREFIX):
-                try:
-                    payload = json.loads(line[len(RESULT_PREFIX):])
-                    metrics = payload.get("metrics", {})
-                    diagnostics = payload.get("diagnostics", {})
-                    artifact_refs = payload.get("artifact_refs", [])
-                    if not isinstance(metrics, dict):
-                        metrics = {}
-                    if not isinstance(diagnostics, dict):
-                        diagnostics = {}
-                    if not isinstance(artifact_refs, list):
-                        artifact_refs = []
-                    result_emitted = True
-                    event_queue.put((handle_id, ExecutionEvent(
-                        kind=EventKind.COMPLETED,
-                        handle_id=handle_id,
-                        run_result=RunResult(
-                            metrics=metrics,
-                            diagnostics=diagnostics,
-                            artifact_refs=artifact_refs,
-                        ),
-                    )))
-                except (json.JSONDecodeError, TypeError, ValueError):
-                    pass
 
         proc.wait()
     except Exception as e:
@@ -145,19 +117,11 @@ def _run_worker(handle_id: str, request: ExecutionRequest, event_queue: Queue[tu
         )))
         return
 
-    if result_emitted:
-        return
-
     exit_code = proc.returncode if proc else -1
     if exit_code == 0:
         event_queue.put((handle_id, ExecutionEvent(
             kind=EventKind.COMPLETED,
             handle_id=handle_id,
-            run_result=RunResult(
-                metrics={"exit_code": exit_code},
-                diagnostics={},
-                artifact_refs=[],
-            ),
         )))
     else:
         stderr = b""

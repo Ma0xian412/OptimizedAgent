@@ -17,6 +17,7 @@ from optimization_control_plane.ports.optimizer_backend import (
 )
 from optimization_control_plane.ports.policies import DispatchPolicy, ParallelismPolicy
 from optimization_control_plane.ports.result_store import ResultStore
+from optimization_control_plane.ports.run_result_loader import RunResultLoader
 
 __all__ = [
     "DispatchPolicy",
@@ -30,6 +31,7 @@ __all__ = [
     "ParallelismPolicy",
     "ProgressScorer",
     "ResultStore",
+    "RunResultLoader",
     "RunCache",
     "RunKeyBuilder",
     "RunSpecBuilder",

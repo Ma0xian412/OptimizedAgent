@@ -5,6 +5,7 @@ import os
 import threading
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 from optimization_control_plane.adapters.optuna import OptunaBackendAdapter
@@ -14,12 +15,13 @@ from optimization_control_plane.adapters.policies import (
 )
 from optimization_control_plane.adapters.storage import (
     FileObjectiveCache,
+    FileRunResultLoader,
     FileResultStore,
     FileRunCache,
 )
 from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrator
 from optimization_control_plane.domain.enums import EventKind, JobStatus
-from optimization_control_plane.domain.models import ExecutionEvent, ExecutionRequest, RunHandle, RunResult
+from optimization_control_plane.domain.models import ExecutionEvent, ExecutionRequest, RunHandle
 from tests.conftest import (
     StubDatasetEnumerator,
     StubGroundTruthProvider,
@@ -41,6 +43,12 @@ class DelayedCompletionBackend:
         self.submitted = threading.Event()
 
     def submit(self, request: ExecutionRequest) -> RunHandle:
+        result_file = Path(request.run_spec.result_path)
+        result_file.parent.mkdir(parents=True, exist_ok=True)
+        result_file.write_text(
+            '{"metrics":{"metric_1":0.5},"diagnostics":{},"artifact_refs":[]}',
+            encoding="utf-8",
+        )
         self._handle = RunHandle(
             handle_id=f"fh_{uuid.uuid4().hex[:12]}",
             request_id=request.request_id,
@@ -63,7 +71,6 @@ class DelayedCompletionBackend:
         return ExecutionEvent(
             kind=EventKind.COMPLETED,
             handle_id=self._handle.handle_id,
-            run_result=RunResult(metrics={"metric_1": 0.5}, diagnostics={}, artifact_refs=[]),
         )
 
     def cancel(self, handle: RunHandle, reason: str) -> None:
@@ -95,6 +102,7 @@ class TestGracefulStop:
             execution_backend=exec_be,
             parallelism_policy=AsyncFillParallelismPolicy(),
             dispatch_policy=SubmitNowDispatchPolicy(),
+            run_result_loader=FileRunResultLoader(),
             run_cache=FileRunCache(os.path.join(str(tmp_path), "data")),
             objective_cache=FileObjectiveCache(os.path.join(str(tmp_path), "data")),
             result_store=FileResultStore(os.path.join(str(tmp_path), "data")),

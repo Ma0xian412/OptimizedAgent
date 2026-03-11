@@ -26,6 +26,7 @@ from optimization_control_plane.ports.cache import ObjectiveCache, RunCache
 from optimization_control_plane.ports.execution_backend import ExecutionBackend
 from optimization_control_plane.ports.optimizer_backend import OptimizerBackend
 from optimization_control_plane.ports.result_store import ResultStore
+from optimization_control_plane.ports.run_result_loader import RunResultLoader
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ class EventHandlerDeps:
     objective_def: ObjectiveDefinition
     backend: OptimizerBackend
     execution_backend: ExecutionBackend
+    run_result_loader: RunResultLoader
     run_cache: RunCache
     objective_cache: ObjectiveCache
     result_store: ResultStore
@@ -63,8 +65,7 @@ def _handle_checkpoint(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
 
 def _handle_completed(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
     entry = deps.inflight_registry.get_by_handle(event.handle_id)
-    run_result = event.run_result
-    assert run_result is not None, "COMPLETED event must carry run_result"
+    run_result = deps.run_result_loader.load(entry.leader.run_spec)
     deps.run_cache.put(entry.run_key, run_result)
     deps.result_store.write_run_record(entry.run_key, run_result)
     objective = deps.objective_def.objective_evaluator.evaluate(run_result, deps.spec, deps.groundtruth)

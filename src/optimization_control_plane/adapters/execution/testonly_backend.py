@@ -1,9 +1,11 @@
 """Programmable fake ExecutionBackend for testing the control plane."""
 from __future__ import annotations
 
+import json
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from optimization_control_plane.domain.enums import EventKind, JobStatus
 from optimization_control_plane.domain.models import (
@@ -55,6 +57,7 @@ class FakeExecutionBackend:
         if script is None:
             script = FakeRunScript()
 
+        self._write_result_file(request, script)
         self._enqueue_events(handle_id, script)
         return handle
 
@@ -93,13 +96,9 @@ class FakeExecutionBackend:
             ))
 
         if script.final_event == EventKind.COMPLETED:
-            result = script.run_result or RunResult(
-                metrics={}, diagnostics={}, artifact_refs=[]
-            )
             self._pending_events.append(ExecutionEvent(
                 kind=EventKind.COMPLETED,
                 handle_id=handle_id,
-                run_result=result,
             ))
         elif script.final_event == EventKind.FAILED:
             self._pending_events.append(ExecutionEvent(
@@ -113,3 +112,16 @@ class FakeExecutionBackend:
                 handle_id=handle_id,
                 reason=script.fail_reason or "user_stop",
             ))
+
+    def _write_result_file(self, request: ExecutionRequest, script: FakeRunScript) -> None:
+        if script.final_event != EventKind.COMPLETED:
+            return
+        result = script.run_result or RunResult(metrics={}, diagnostics={}, artifact_refs=[])
+        path = Path(request.run_spec.result_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "metrics": result.metrics,
+            "diagnostics": result.diagnostics,
+            "artifact_refs": result.artifact_refs,
+        }
+        path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")

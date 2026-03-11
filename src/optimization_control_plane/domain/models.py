@@ -60,6 +60,7 @@ class ResourceRequest:
 @dataclass(frozen=True)
 class RunSpec:
     job: Job
+    result_path: str
     resource_request: ResourceRequest = field(default_factory=ResourceRequest)
 
 
@@ -107,7 +108,6 @@ class ExecutionEvent:
     handle_id: str
     step: int | None = None
     checkpoint: Checkpoint | None = None
-    run_result: RunResult | None = None
     reason: str | None = None
     error_code: str | None = None
 
