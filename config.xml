@@ -11,19 +11,24 @@
         <max_workers>4</max_workers>
     </study>
 
-    <paths>
-        <data_dir>/workspace/data/backtestsys_mock</data_dir>
-        <backtestsys_repo_root>/workspace/BackTestSys</backtestsys_repo_root>
-        <backtestsys_base_config>/workspace/BackTestSys/config.xml</backtestsys_base_config>
-        <groundtruth_dir>/workspace/tests/fixtures/backtestsys_gt</groundtruth_dir>
-    </paths>
+    <storage>
+        <storage_base>/workspace/data/backtestsys_mock</storage_base>
+    </storage>
+
+    <targets>
+        <backtestsys>
+            <data_dir>/workspace/tests/fixtures/backtestsys_gt/data_auto</data_dir>
+            <repo_root>/workspace/BackTestSys</repo_root>
+            <base_config>/workspace/BackTestSys/config.xml</base_config>
+            <groundtruth_dir>/workspace/tests/fixtures/backtestsys_gt</groundtruth_dir>
+        </backtestsys>
+    </targets>
 
     <dataset_plan>
         <train_ratio>9</train_ratio>
         <test_ratio>1</test_ratio>
         <seed>42</seed>
         <auto_discovery>
-            <data_dir>/workspace/tests/fixtures/backtestsys_gt/data_auto</data_dir>
             <data_glob>market_*.csv</data_glob>
             <data_date_regex>market_(?P&lt;date&gt;\d{8})\.csv</data_date_regex>
             <replay_order_dir>/workspace/tests/fixtures/backtestsys_gt/replay_auto</replay_order_dir>

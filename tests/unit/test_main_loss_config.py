@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from main import _build_settings, _load_config
 
 
@@ -57,9 +59,9 @@ def test_build_settings_writes_default_loss_config_when_loss_missing(tmp_path: P
     }
 
 
-def _write_config(tmp_path: Path, *, loss_block: str) -> Path:
-    config = tmp_path / "config.xml"
-    config.write_text(
+def test_load_config_rejects_legacy_paths_schema(tmp_path: Path) -> None:
+    legacy_path = tmp_path / "legacy_config.xml"
+    legacy_path.write_text(
         f"""<?xml version="1.0" encoding="utf-8"?>
 <optimization>
     <study>
@@ -78,6 +80,96 @@ def _write_config(tmp_path: Path, *, loss_block: str) -> Path:
         <backtestsys_base_config>/workspace/BackTestSys/config.xml</backtestsys_base_config>
         <groundtruth_dir>{tmp_path}</groundtruth_dir>
     </paths>
+    <dataset_plan>
+        <train_ratio>1</train_ratio>
+        <test_ratio>1</test_ratio>
+        <seed>42</seed>
+        <files>
+            <file id="d1" path="/tmp/data_1.csv" order_file="/tmp/orders_1.csv" cancel_file="/tmp/cancels_1.csv" />
+            <file id="d2" path="/tmp/data_2.csv" order_file="/tmp/orders_2.csv" cancel_file="/tmp/cancels_2.csv" />
+        </files>
+    </dataset_plan>
+    <sampler>
+        <type>random</type>
+        <seed>42</seed>
+    </sampler>
+    <pruner>
+        <type>nop</type>
+    </pruner>
+    <search_space>
+        <param name="runner.delay_in" type="int" low="0" high="1" />
+    </search_space>
+</optimization>
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match=r"xml missing required path: \./targets/backtestsys/data_dir"):
+        _load_config(str(legacy_path))
+
+
+def test_load_config_requires_storage_base(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path, loss_block="")
+    config_text = config_path.read_text(encoding="utf-8")
+    removed = config_text.replace(
+        f"""    <storage>
+        <storage_base>{tmp_path / "storage"}</storage_base>
+    </storage>
+""",
+        "",
+    )
+    missing_storage = tmp_path / "missing_storage.xml"
+    missing_storage.write_text(removed, encoding="utf-8")
+    with pytest.raises(ValueError, match=r"xml missing required path: \./storage/storage_base"):
+        _load_config(str(missing_storage))
+
+
+def test_load_config_requires_backtestsys_target(tmp_path: Path) -> None:
+    config_path = _write_config(tmp_path, loss_block="")
+    config_text = config_path.read_text(encoding="utf-8")
+    removed = config_text.replace(
+        f"""    <targets>
+        <backtestsys>
+            <data_dir>{tmp_path / "data"}</data_dir>
+            <repo_root>/workspace/BackTestSys</repo_root>
+            <base_config>/workspace/BackTestSys/config.xml</base_config>
+            <groundtruth_dir>{tmp_path}</groundtruth_dir>
+        </backtestsys>
+    </targets>
+""",
+        "",
+    )
+    missing_target = tmp_path / "missing_target.xml"
+    missing_target.write_text(removed, encoding="utf-8")
+    with pytest.raises(ValueError, match=r"xml missing required path: \./targets/backtestsys/data_dir"):
+        _load_config(str(missing_target))
+
+
+def _write_config(tmp_path: Path, *, loss_block: str) -> Path:
+    config = tmp_path / "config.xml"
+    config.write_text(
+        f"""<?xml version="1.0" encoding="utf-8"?>
+<optimization>
+    <study>
+        <spec_id>test_spec</spec_id>
+        <dataset_version>v1</dataset_version>
+        <engine_version>engine_v1</engine_version>
+        <storage_dsn>sqlite:///{tmp_path / "study.db"}</storage_dsn>
+        <max_trials>2</max_trials>
+        <max_failures>2</max_failures>
+        <max_in_flight_trials>1</max_in_flight_trials>
+        <max_workers>1</max_workers>
+    </study>
+    <storage>
+        <storage_base>{tmp_path / "storage"}</storage_base>
+    </storage>
+    <targets>
+        <backtestsys>
+            <data_dir>{tmp_path / "data"}</data_dir>
+            <repo_root>/workspace/BackTestSys</repo_root>
+            <base_config>/workspace/BackTestSys/config.xml</base_config>
+            <groundtruth_dir>{tmp_path}</groundtruth_dir>
+        </backtestsys>
+    </targets>
     <dataset_plan>
         <train_ratio>1</train_ratio>
         <test_ratio>1</test_ratio>

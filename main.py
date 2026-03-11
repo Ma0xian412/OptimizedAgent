@@ -61,7 +61,8 @@ class AppConfig:
     max_workers: int
     sampler: dict[str, Any]
     pruner: dict[str, Any]
-    data_dir: str
+    storage_base: str
+    backtest_data_dir: str
     repo_root: str
     base_config_path: str
     replay_order_file: str
@@ -102,12 +103,13 @@ def _parse_args() -> argparse.Namespace:
 
 def _load_config(config_path: str) -> AppConfig:
     root = ET.parse(config_path).getroot()
+    backtest_data_dir = _require_text(root, "./targets/backtestsys/data_dir")
     search_params = _parse_search_params(root)
     base_overrides = _parse_base_overrides(root)
-    dataset_files = _parse_dataset_files(root)
+    dataset_files = _parse_dataset_files(root, backtest_data_dir)
     loss_weights, loss_eps = _parse_loss_config(root)
-    fallback_order = _optional_text(root, "./paths/replay_order_file")
-    fallback_cancel = _optional_text(root, "./paths/replay_cancel_file")
+    fallback_order = _optional_text(root, "./targets/backtestsys/replay_order_file")
+    fallback_cancel = _optional_text(root, "./targets/backtestsys/replay_cancel_file")
     replay_order_file = _resolve_replay_file(dataset_files, "order_file", fallback_order)
     replay_cancel_file = _resolve_replay_file(dataset_files, "cancel_file", fallback_cancel)
     return AppConfig(
@@ -121,12 +123,13 @@ def _load_config(config_path: str) -> AppConfig:
         max_workers=_as_int(_require_text(root, "./study/max_workers")),
         sampler=_parse_sampler(root),
         pruner=_parse_pruner(root),
-        data_dir=_require_text(root, "./paths/data_dir"),
-        repo_root=_require_text(root, "./paths/backtestsys_repo_root"),
-        base_config_path=_require_text(root, "./paths/backtestsys_base_config"),
+        storage_base=_require_text(root, "./storage/storage_base"),
+        backtest_data_dir=backtest_data_dir,
+        repo_root=_require_text(root, "./targets/backtestsys/repo_root"),
+        base_config_path=_require_text(root, "./targets/backtestsys/base_config"),
         replay_order_file=replay_order_file,
         replay_cancel_file=replay_cancel_file,
-        groundtruth_dir=_require_text(root, "./paths/groundtruth_dir"),
+        groundtruth_dir=_require_text(root, "./targets/backtestsys/groundtruth_dir"),
         search_params=search_params,
         base_overrides=base_overrides,
         dataset_files=dataset_files,
@@ -166,11 +169,14 @@ def _parse_base_overrides(root: ET.Element) -> dict[str, Any]:
     return overrides
 
 
-def _parse_dataset_files(root: ET.Element) -> list[dict[str, str]]:
+def _parse_dataset_files(
+    root: ET.Element,
+    backtest_data_dir: str,
+) -> list[dict[str, str]]:
     explicit_files = root.findall("./dataset_plan/files/file")
     if explicit_files:
         return _parse_explicit_dataset_files(explicit_files)
-    discovery = _parse_discovery_config(root)
+    discovery = _parse_discovery_config(root, backtest_data_dir)
     return BackTestSysDatasetDiscoveryAdapter().discover(discovery)
 
 
@@ -195,9 +201,12 @@ def _parse_explicit_dataset_files(nodes: list[ET.Element]) -> list[dict[str, str
     return files
 
 
-def _parse_discovery_config(root: ET.Element) -> DatasetDiscoveryConfig:
+def _parse_discovery_config(
+    root: ET.Element,
+    backtest_data_dir: str,
+) -> DatasetDiscoveryConfig:
     return DatasetDiscoveryConfig(
-        data_dir=_require_text(root, "./dataset_plan/auto_discovery/data_dir"),
+        data_dir=backtest_data_dir,
         data_glob=_require_text(root, "./dataset_plan/auto_discovery/data_glob"),
         data_date_regex=_require_text(root, "./dataset_plan/auto_discovery/data_date_regex"),
         replay_order_dir=_require_text(root, "./dataset_plan/auto_discovery/replay_order_dir"),
@@ -317,8 +326,8 @@ def _build_settings(cfg: AppConfig) -> dict[str, Any]:
 
 
 def _build_orchestrator(cfg: AppConfig) -> tuple[TrialOrchestrator, BackTestSysExecutionBackend]:
-    data_dir = Path(cfg.data_dir)
-    data_dir.mkdir(parents=True, exist_ok=True)
+    storage_base = Path(cfg.storage_base)
+    storage_base.mkdir(parents=True, exist_ok=True)
     objective_def = ObjectiveDefinition(
         search_space=BackTestSysSearchSpace(cfg.search_params),
         run_spec_builder=BackTestSysRunSpecBuilder(
@@ -345,9 +354,9 @@ def _build_orchestrator(cfg: AppConfig) -> tuple[TrialOrchestrator, BackTestSysE
         execution_backend=execution_backend,
         parallelism_policy=AsyncFillParallelismPolicy(),
         dispatch_policy=SubmitNowDispatchPolicy(),
-        run_cache=FileRunCache(str(data_dir)),
-        objective_cache=FileObjectiveCache(str(data_dir)),
-        result_store=FileResultStore(str(data_dir)),
+        run_cache=FileRunCache(str(storage_base)),
+        objective_cache=FileObjectiveCache(str(storage_base)),
+        result_store=FileResultStore(str(storage_base)),
     )
     return orchestrator, execution_backend
 
