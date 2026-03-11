@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from optimization_control_plane.adapters.backtestsys.groundtruth_adapter import (
-    BackTestSysGroundTruthAdapter,
-)
+from optimization_control_plane.adapters.backtestsys.groundtruth_adapter import BackTestSysGroundTruth
 from optimization_control_plane.adapters.backtestsys.loss_components import (
     ALL_COMPONENTS,
     DEFAULT_EPS,
@@ -17,6 +15,7 @@ from optimization_control_plane.adapters.backtestsys.loss_components import (
 from optimization_control_plane.adapters.backtestsys.loss_metrics import compute_raw_components
 from optimization_control_plane.domain.models import (
     ExperimentSpec,
+    GroundTruthData,
     ObjectiveResult,
     RunResult,
 )
@@ -25,19 +24,17 @@ from optimization_control_plane.domain.models import (
 class BackTestSysCountDiffEvaluator:
     """BackTestSys loss evaluator with curve/terminal/cancel/post components."""
 
-    def __init__(
-        self,
-        groundtruth_adapter: BackTestSysGroundTruthAdapter,
-        groundtruth_dir: str | None = None,
-    ) -> None:
-        self._groundtruth_adapter = groundtruth_adapter
-        self._groundtruth_dir = groundtruth_dir
+    def __init__(self) -> None:
         self._base_loss: float | None = None
         self._base_attrs: dict[str, Any] = {}
 
-    def evaluate(self, run_result: RunResult, spec: ExperimentSpec) -> ObjectiveResult:
-        gt_dir = self._groundtruth_dir or self._resolve_groundtruth_dir(spec)
-        gt = self._groundtruth_adapter.load(gt_dir)
+    def evaluate(
+        self,
+        run_result: RunResult,
+        spec: ExperimentSpec,
+        groundtruth: GroundTruthData,
+    ) -> ObjectiveResult:
+        gt = self._require_backtest_groundtruth(groundtruth)
         tables = read_result_tables(run_result.diagnostics)
         order_profiles = build_order_profiles(
             order_rows=tables["orderinfo_rows"],
@@ -59,7 +56,7 @@ class BackTestSysCountDiffEvaluator:
         loss = sum(normalized_components[name] * weights_used[name] for name in available_components)
         attrs = {
             "objective_name": "backtestsys_curve_terminal_cancel_post",
-            "groundtruth_dir": gt_dir,
+            "groundtruth_fingerprint": groundtruth.fingerprint,
             "raw_components": raw_components,
             "normalized_components": normalized_components,
             "weights_used": weights_used,
@@ -78,14 +75,11 @@ class BackTestSysCountDiffEvaluator:
         )
 
     @staticmethod
-    def _resolve_groundtruth_dir(spec: ExperimentSpec) -> str:
-        groundtruth_cfg = spec.objective_config.get("groundtruth")
-        if not isinstance(groundtruth_cfg, dict):
-            raise ValueError("spec.objective_config.groundtruth must be a dict")
-        gt_dir = groundtruth_cfg.get("dir")
-        if not isinstance(gt_dir, str) or not gt_dir:
-            raise ValueError("spec.objective_config.groundtruth.dir must be a non-empty string")
-        return gt_dir
+    def _require_backtest_groundtruth(groundtruth: GroundTruthData) -> BackTestSysGroundTruth:
+        payload = groundtruth.payload
+        if not isinstance(payload, BackTestSysGroundTruth):
+            raise TypeError("groundtruth payload must be BackTestSysGroundTruth")
+        return payload
 
     def set_base_loss(self, loss: float, attrs: dict[str, Any] | None = None) -> None:
         self._base_loss = float(loss)

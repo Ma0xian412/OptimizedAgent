@@ -20,6 +20,7 @@ from optimization_control_plane.adapters.storage import (
 )
 from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrator
 from tests.conftest import (
+    StubGroundTruthProvider,
     StubObjectiveEvaluator,
     StubObjectiveKeyBuilder,
     StubRunKeyBuilder,
@@ -42,6 +43,7 @@ def _build_orchestrator(tmp_path: str) -> TrialOrchestrator:
             progress_scorer=None,
             objective_evaluator=StubObjectiveEvaluator(),
         ),
+        groundtruth_provider=StubGroundTruthProvider(),
         execution_backend=FakeExecutionBackend(),
         parallelism_policy=AsyncFillParallelismPolicy(),
         dispatch_policy=SubmitNowDispatchPolicy(),
@@ -79,3 +81,19 @@ def test_start_rejects_mismatched_spec_and_settings(tmp_path: Any) -> None:
 
     with pytest.raises(ValueError, match="provided spec does not match"):
         orch.start(spec=spec, settings=settings)
+
+
+def test_start_rejects_missing_groundtruth(tmp_path: Any) -> None:
+    orch = _build_orchestrator(str(tmp_path))
+    settings = make_settings(
+        objective_config={
+            "name": "test_loss",
+            "version": "v1",
+            "direction": "minimize",
+            "params": {},
+            "sampler": {"type": "random", "seed": 42},
+            "pruner": {"type": "nop"},
+        }
+    )
+    with pytest.raises(ValueError, match="spec.objective_config.groundtruth"):
+        orch.start(settings=settings)

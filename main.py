@@ -11,6 +11,7 @@ from optimization_control_plane.adapters.backtestsys import (
     BackTestSysDatasetDiscoveryAdapter,
     BackTestSysExecutionBackend,
     BackTestSysGroundTruthAdapter,
+    BackTestSysGroundTruthProvider,
     BackTestSysObjectiveKeyBuilder,
     BackTestSysRunKeyBuilder,
     BackTestSysRunSpecBuilder,
@@ -345,16 +346,15 @@ def _build_orchestrator(cfg: AppConfig) -> tuple[TrialOrchestrator, BackTestSysE
         run_key_builder=BackTestSysRunKeyBuilder(),
         objective_key_builder=BackTestSysObjectiveKeyBuilder(),
         progress_scorer=None,
-        objective_evaluator=BackTestSysCountDiffEvaluator(
-            groundtruth_adapter=BackTestSysGroundTruthAdapter(),
-            groundtruth_dir=cfg.groundtruth_dir,
-        ),
+        objective_evaluator=BackTestSysCountDiffEvaluator(),
         trial_loss_aggregator=MeanTrialLossAggregator(),
     )
     execution_backend = BackTestSysExecutionBackend(max_workers=cfg.max_workers)
+    groundtruth_adapter = BackTestSysGroundTruthAdapter()
     orchestrator = TrialOrchestrator(
         backend=OptunaBackendAdapter(storage_dsn=cfg.storage_dsn),
         objective_def=objective_def,
+        groundtruth_provider=BackTestSysGroundTruthProvider(groundtruth_adapter),
         execution_backend=execution_backend,
         parallelism_policy=AsyncFillParallelismPolicy(),
         dispatch_policy=SubmitNowDispatchPolicy(),

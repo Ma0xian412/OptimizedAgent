@@ -20,6 +20,7 @@ from optimization_control_plane.adapters.storage import (
 from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrator
 from optimization_control_plane.domain.models import ObjectiveResult, RunResult
 from tests.conftest import (
+    StubGroundTruthProvider,
     StubObjectiveEvaluator,
     StubObjectiveKeyBuilder,
     StubRunKeyBuilder,
@@ -61,6 +62,7 @@ def test_multi_run_trial_aggregation_and_final_test_report(tmp_path: Any) -> Non
     orch = TrialOrchestrator(
         backend=backend,
         objective_def=obj_def,
+        groundtruth_provider=StubGroundTruthProvider(),
         execution_backend=exec_be,
         parallelism_policy=AsyncFillParallelismPolicy(),
         dispatch_policy=SubmitNowDispatchPolicy(),

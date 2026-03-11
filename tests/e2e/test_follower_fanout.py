@@ -21,6 +21,7 @@ from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrat
 from optimization_control_plane.domain.enums import EventKind
 from optimization_control_plane.domain.models import RunResult
 from tests.conftest import (
+    StubGroundTruthProvider,
     StubObjectiveEvaluator,
     StubObjectiveKeyBuilder,
     StubRunKeyBuilder,
@@ -61,6 +62,7 @@ def _make_orchestrator(
     orch = TrialOrchestrator(
         backend=backend,
         objective_def=obj_def,
+        groundtruth_provider=StubGroundTruthProvider(),
         execution_backend=exec_be,
         parallelism_policy=AsyncFillParallelismPolicy(),
         dispatch_policy=SubmitNowDispatchPolicy(),

@@ -23,6 +23,7 @@ from optimization_control_plane.core.orchestration.trial_batching import (
 )
 from optimization_control_plane.domain.models import ObjectiveResult, RunResult
 from tests.conftest import (
+    StubGroundTruthProvider,
     StubObjectiveKeyBuilder,
     StubRunKeyBuilder,
     StubRunSpecBuilder,
@@ -41,7 +42,7 @@ class _BaselineAwareEvaluator:
         self.base_loss = float(loss)
         self.base_attrs = dict(attrs or {})
 
-    def evaluate(self, run_result: RunResult, spec: Any) -> ObjectiveResult:
+    def evaluate(self, run_result: RunResult, spec: Any, groundtruth: Any) -> ObjectiveResult:
         attrs = {}
         for name in ("curve", "terminal", "cancel", "post"):
             if name in run_result.metrics:
@@ -120,6 +121,7 @@ def test_baseline_loss_initialized_before_trials(tmp_path: Any) -> None:
     orch = TrialOrchestrator(
         backend=OptunaBackendAdapter(storage_dsn=f"sqlite:///{db}"),
         objective_def=obj_def,
+        groundtruth_provider=StubGroundTruthProvider(),
         execution_backend=exec_be,
         parallelism_policy=AsyncFillParallelismPolicy(),
         dispatch_policy=SubmitNowDispatchPolicy(),

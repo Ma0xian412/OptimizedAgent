@@ -25,7 +25,12 @@ from optimization_control_plane.domain.models import (
     stable_json_serialize,
 )
 from optimization_control_plane.ports.optimizer_backend import TrialContext
-from tests.conftest import StubObjectiveEvaluator, StubObjectiveKeyBuilder, make_settings
+from tests.conftest import (
+    StubGroundTruthProvider,
+    StubObjectiveEvaluator,
+    StubObjectiveKeyBuilder,
+    make_settings,
+)
 
 
 class RandomSearchSpace:
@@ -74,6 +79,7 @@ class TestRandomSamplerE2E:
         orch = TrialOrchestrator(
             backend=backend,
             objective_def=obj_def,
+            groundtruth_provider=StubGroundTruthProvider(),
             execution_backend=exec_be,
             parallelism_policy=AsyncFillParallelismPolicy(),
             dispatch_policy=SubmitNowDispatchPolicy(),
@@ -88,6 +94,7 @@ class TestRandomSamplerE2E:
             "version": "v1",
             "direction": "minimize",
             "params": {},
+            "groundtruth": {"version": "gt_v1", "path": "/tmp/gt.json"},
             "sampler": {"type": "random", "seed": 42},
             "pruner": {"type": "nop"},
         }

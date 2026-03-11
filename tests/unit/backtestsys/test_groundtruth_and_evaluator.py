@@ -8,7 +8,7 @@ from optimization_control_plane.adapters.backtestsys import (
     BackTestSysCountDiffEvaluator,
     BackTestSysGroundTruthAdapter,
 )
-from optimization_control_plane.domain.models import RunResult
+from optimization_control_plane.domain.models import GroundTruthData, RunResult
 from tests.conftest import make_spec
 
 
@@ -36,8 +36,8 @@ def test_evaluator_computes_four_components_and_total_loss(tmp_path: Path) -> No
         "eps": {"curve": 0.0, "terminal": 0.0, "cancel": 0.0, "post": 0.0},
     })
     run_result = _make_run_result()
-    evaluator = BackTestSysCountDiffEvaluator(groundtruth_adapter=BackTestSysGroundTruthAdapter())
-    objective = evaluator.evaluate(run_result, spec)
+    evaluator = BackTestSysCountDiffEvaluator()
+    objective = evaluator.evaluate(run_result, spec, _build_groundtruth(gt_dir))
     raw = objective.attrs["raw_components"]
     assert raw["curve"] == pytest.approx(0.9)
     assert raw["terminal"] == pytest.approx(0.175)
@@ -60,7 +60,7 @@ def test_evaluator_uses_baseline_components_for_normalization(tmp_path: Path) ->
         "weights": {"curve": 1.0, "terminal": 1.0, "cancel": 1.0, "post": 1.0},
         "eps": {"curve": 0.0, "terminal": 0.0, "cancel": 0.0, "post": 0.0},
     })
-    evaluator = BackTestSysCountDiffEvaluator(groundtruth_adapter=BackTestSysGroundTruthAdapter())
+    evaluator = BackTestSysCountDiffEvaluator()
     evaluator.set_base_loss(
         7.5,
         attrs={
@@ -72,7 +72,7 @@ def test_evaluator_uses_baseline_components_for_normalization(tmp_path: Path) ->
             }
         },
     )
-    objective = evaluator.evaluate(_make_run_result(), spec)
+    objective = evaluator.evaluate(_make_run_result(), spec, _build_groundtruth(gt_dir))
     normalized = objective.attrs["normalized_components"]
     assert normalized["curve"] == pytest.approx(0.9 / 0.23)
     assert normalized["terminal"] == pytest.approx(0.5)
@@ -102,9 +102,9 @@ def test_evaluator_raises_when_no_evaluable_orders(tmp_path: Path) -> None:
         }},
         artifact_refs=[],
     )
-    evaluator = BackTestSysCountDiffEvaluator(groundtruth_adapter=BackTestSysGroundTruthAdapter())
+    evaluator = BackTestSysCountDiffEvaluator()
     with pytest.raises(ValueError, match="no evaluable orders"):
-        evaluator.evaluate(run_result, spec)
+        evaluator.evaluate(run_result, spec, _build_groundtruth(gt_dir))
 
 
 def _make_run_result() -> RunResult:
@@ -154,3 +154,12 @@ def _write_gt_files(base_dir: Path) -> Path:
         encoding="utf-8",
     )
     return base_dir
+
+
+def _build_groundtruth(gt_dir: Path) -> GroundTruthData:
+    adapter = BackTestSysGroundTruthAdapter()
+    payload = adapter.load(str(gt_dir))
+    return GroundTruthData(
+        payload=payload,
+        fingerprint=f"test:{gt_dir.name}",
+    )

@@ -16,6 +16,7 @@ from optimization_control_plane.domain.enums import EventKind, TrialState
 from optimization_control_plane.domain.models import (
     ExecutionEvent,
     ExperimentSpec,
+    GroundTruthData,
     ObjectiveResult,
     SamplerProfile,
 )
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 class EventHandlerDeps:
     study_id: str
     spec: ExperimentSpec
+    groundtruth: GroundTruthData
     profile: SamplerProfile
     objective_def: ObjectiveDefinition
     backend: OptimizerBackend
@@ -75,7 +77,11 @@ def _handle_completed(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
 
     deps.run_cache.put(run_key, run_result)
     deps.result_store.write_run_record(run_key, run_result)
-    obj = deps.objective_def.objective_evaluator.evaluate(run_result, deps.spec)
+    obj = deps.objective_def.objective_evaluator.evaluate(
+        run_result,
+        deps.spec,
+        deps.groundtruth,
+    )
     deps.objective_cache.put(entry.leader.objective_key, obj)
     all_bindings = deps.inflight_registry.pop_all_trials_for_run_key(run_key)
     if deps.trial_batches is None:

@@ -5,6 +5,7 @@ from typing import Any, Protocol, runtime_checkable
 from optimization_control_plane.domain.models import (
     Checkpoint,
     ExperimentSpec,
+    GroundTruthData,
     ObjectiveResult,
     RunResult,
     RunSpec,
@@ -39,7 +40,12 @@ class ProgressScorer(Protocol):
 
 @runtime_checkable
 class ObjectiveEvaluator(Protocol):
-    def evaluate(self, run_result: RunResult, spec: ExperimentSpec) -> ObjectiveResult: ...
+    def evaluate(
+        self,
+        run_result: RunResult,
+        spec: ExperimentSpec,
+        groundtruth: GroundTruthData,
+    ) -> ObjectiveResult: ...
 
 
 @runtime_checkable
