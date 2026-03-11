@@ -1447,7 +1447,7 @@ src/
         sampler_profile.py           # SamplerProfile 到 Optuna sampler 的映射
       execution/                     # 执行后端适配器
         __init__.py
-        fake_backend.py              # FakeExecutionBackend（测试用）
+        testonly_backend.py          # FakeExecutionBackend（测试用）
       storage/                       # 存储适配器（V1 文件实现）
         __init__.py
         file_run_cache.py            # FileRunCache
@@ -1580,7 +1580,7 @@ adapters/ → core/ → ports/ → domain/
 
 | 任务编号 | 文件 | 内容 |
 |---|---|---|
-| `T-4.1` | `adapters/execution/fake_backend.py` | `FakeExecutionBackend` 完整实现 |
+| `T-4.1` | `adapters/execution/testonly_backend.py` | `FakeExecutionBackend` 完整实现 |
 
 ### 实现要求
 - `submit()`：接受 `ExecutionRequest`，返回 `RunHandle`
