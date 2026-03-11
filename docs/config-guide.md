@@ -18,7 +18,8 @@ python3 main.py --config /workspace/config.xml
 `config.xml` 顶层节点 `<optimization>` 下包含：
 
 - `<study>`：实验与并发
-- `<paths>`：BackTestSys 路径与 GT 路径
+- `<storage>`：控制面文件存储（RunCache / ObjectiveCache / ResultStore）
+- `<targets>`：按执行目标划分的 BackTestSys 配置
 - `<dataset_plan>`：数据自动发现与 train:test 切分（9:1）
 - `<sampler>`：Optuna sampler
 - `<pruner>`：Optuna pruner（当前仅终态事件）
@@ -35,7 +36,7 @@ python3 main.py --config /workspace/config.xml
     <spec_id>backtestsys_countdiff_demo</spec_id>
     <dataset_version>mock_v1</dataset_version>
     <engine_version>backtestsys_main</engine_version>
-    <storage_dsn>sqlite:////workspace/data/backtestsys_mock/study.db</storage_dsn>
+    <storage_dsn>sqlite:////workspace/data/optuna/study.db</storage_dsn>
     <max_trials>8</max_trials>
     <max_failures>8</max_failures>
     <max_in_flight_trials>4</max_in_flight_trials>
@@ -46,24 +47,39 @@ python3 main.py --config /workspace/config.xml
 - `max_trials`：trial 数（不是子 run 数）
 - `max_in_flight_trials`：控制面并发槽位
 - `max_workers`：BackTestSys 执行后端线程池大小
+- `storage_dsn`：仅用于 Optuna study 存储（独立于 `storage.storage_base`）
 
 ---
 
-## 4. paths 节点
+## 4. storage / targets 节点
 
 ```xml
-<paths>
-    <data_dir>/workspace/data/backtestsys_mock</data_dir>
-    <backtestsys_repo_root>/workspace/BackTestSys</backtestsys_repo_root>
-    <backtestsys_base_config>/workspace/BackTestSys/config.xml</backtestsys_base_config>
-    <groundtruth_dir>/workspace/tests/fixtures/backtestsys_gt</groundtruth_dir>
-</paths>
+<storage>
+    <storage_base>/workspace/data/backtestsys_mock</storage_base>
+</storage>
+
+<targets>
+    <backtestsys>
+        <data_dir>/workspace/tests/fixtures/backtestsys_gt/data_auto</data_dir>
+        <repo_root>/workspace/BackTestSys</repo_root>
+        <base_config>/workspace/BackTestSys/config.xml</base_config>
+        <groundtruth_dir>/workspace/tests/fixtures/backtestsys_gt</groundtruth_dir>
+        <!-- 可选 -->
+        <replay_order_file>/workspace/tests/fixtures/backtestsys_gt/replay_auto/orders_20240101.csv</replay_order_file>
+        <replay_cancel_file>/workspace/tests/fixtures/backtestsys_gt/replay_auto/cancels_20240101.csv</replay_cancel_file>
+    </backtestsys>
+</targets>
 ```
 
-- `groundtruth_dir` 目前为全局 GT 目录，需包含：
+- `storage_base` 必配，仅用于控制面文件存储根目录：
+  - `run_cache/`
+  - `objective_cache/`
+  - `run_records/`（以及 trial 结果/失败审计）
+- `targets.backtestsys.data_dir` 仅表示 BackTestSys 数据目录
+- `targets.backtestsys.groundtruth_dir` 需包含：
   - `doneinfo.csv`
   - `excutiondetail.csv`
-- 自动发现模式下 `replay_order_file` / `replay_cancel_file` 可以不配置
+- 自动发现模式下 `replay_order_file` / `replay_cancel_file` 可不配置（由 pattern 推导）
 
 ---
 
@@ -75,7 +91,6 @@ python3 main.py --config /workspace/config.xml
     <test_ratio>1</test_ratio>
     <seed>42</seed>
     <auto_discovery>
-        <data_dir>/workspace/tests/fixtures/backtestsys_gt/data_auto</data_dir>
         <data_glob>market_*.csv</data_glob>
         <data_date_regex>market_(?P&lt;date&gt;\d{8})\.csv</data_date_regex>
         <replay_order_dir>/workspace/tests/fixtures/backtestsys_gt/replay_auto</replay_order_dir>
@@ -88,7 +103,7 @@ python3 main.py --config /workspace/config.xml
 
 语义：
 
-1. 在 `data_dir` 内按 `data_glob` 自动搜索数据文件。
+1. 在 `targets.backtestsys.data_dir` 内按 `data_glob` 自动搜索数据文件。
 2. 用 `data_date_regex` 从数据文件名提取日期（需包含命名组 `date` 或第一个捕获组）。
 3. 通过 `replay_order_pattern` / `replay_cancel_pattern` 按同一天匹配 replay 文件。
 4. 组装出 `dataset_plan.files` 后按 `seed` 做 deterministic shuffle。

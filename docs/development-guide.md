@@ -846,6 +846,7 @@ class OptimizerBackend(Protocol):
 
 - `open_or_resume_experiment()`
   - 使用 Optuna RDB storage 创建或恢复 study
+  - `storage_dsn` 仅用于 Optuna study，不承载文件缓存/审计目录
   - 校验 / 持久化 `spec_hash`
   - 将 canonical `ExperimentSpec` 与 study 关联
 - `ask()`
@@ -1052,6 +1053,9 @@ class InflightRegistry:
 
 ### `ResultStore`
 用于审计与持久化，不等价于缓存。
+
+`RunCache`、`ObjectiveCache`、`ResultStore` 的文件根目录应统一由配置
+`storage.storage_base` 注入，且与 `study.storage_dsn` 语义解耦。
 
 #### 必须支持的方法
 
@@ -1559,7 +1563,7 @@ adapters/ → core/ → ports/ → domain/
 | `T-3.3` | `adapters/storage/file_result_store.py` | `FileResultStore` — 基于文件的审计持久化 |
 
 ### 实现要求
-- 可配置 `base_dir`，默认 `./data/`
+- 可配置 `base_dir`，由配置 `storage.storage_base` 注入
 - JSON 格式存储，key 作为文件名（需 safe encoding）
 - 所有写入操作满足幂等要求
 - `ResultStore` 支持按 `trial_id` 回溯
@@ -2029,6 +2033,17 @@ def _run_loop():
 ```json
 {
   "study_name": "study_xxx",
+  "storage": {
+    "storage_base": "/workspace/data/optimization-control-plane"
+  },
+  "targets": {
+    "backtestsys": {
+      "data_dir": "/workspace/backtestsys/data",
+      "repo_root": "/workspace/BackTestSys",
+      "base_config": "/workspace/BackTestSys/config.xml",
+      "groundtruth_dir": "/workspace/groundtruth"
+    }
+  },
   "resume_if_exists": true,
   "sampler": {
     "type": "tpe",
