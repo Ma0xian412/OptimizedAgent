@@ -32,7 +32,6 @@ from optimization_control_plane.adapters.storage import (
     FileRunCache,
 )
 from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrator
-from optimization_control_plane.domain.models import ExperimentSpec, compute_spec_hash
 
 _DEFAULT_CONFIG_PATH = "config.xml"
 _LOSS_COMPONENTS = ("curve", "terminal", "cancel", "post")
@@ -81,11 +80,10 @@ class AppConfig:
 def main() -> None:
     args = _parse_args()
     cfg = _load_config(args.config)
-    spec = _build_spec(cfg)
-    settings = _build_settings(cfg, spec)
+    settings = _build_settings(cfg)
     orchestrator, execution_backend = _build_orchestrator(cfg)
     try:
-        orchestrator.start(spec, settings)
+        orchestrator.start(settings=settings)
     finally:
         execution_backend.shutdown(wait_for_tasks=True)
     _print_summary(orchestrator.metrics.snapshot())
@@ -280,7 +278,7 @@ def _parse_loss_component_map(
     return output
 
 
-def _build_spec(cfg: AppConfig) -> ExperimentSpec:
+def _build_settings(cfg: AppConfig) -> dict[str, Any]:
     meta = {"dataset_version": cfg.dataset_version, "engine_version": cfg.engine_version}
     objective_config = {
         "name": "backtestsys_count_diff",
@@ -297,22 +295,11 @@ def _build_spec(cfg: AppConfig) -> ExperimentSpec:
         "executor_kind": "backtestsys",
         "default_resources": {"cpu": cfg.max_workers},
     }
-    spec_hash = compute_spec_hash(cfg.spec_id, meta, objective_config, execution_config)
-    return ExperimentSpec(
-        spec_id=cfg.spec_id,
-        spec_hash=spec_hash,
-        meta=meta,
-        objective_config=objective_config,
-        execution_config=execution_config,
-    )
-
-
-def _build_settings(cfg: AppConfig, spec: ExperimentSpec) -> dict[str, Any]:
     return {
-        "spec_id": spec.spec_id,
-        "meta": dict(spec.meta),
-        "objective_config": dict(spec.objective_config),
-        "execution_config": dict(spec.execution_config),
+        "spec_id": cfg.spec_id,
+        "meta": meta,
+        "objective_config": objective_config,
+        "execution_config": execution_config,
         "sampler": dict(cfg.sampler),
         "pruner": dict(cfg.pruner),
         "parallelism": {"max_in_flight_trials": cfg.max_in_flight},

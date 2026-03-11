@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from main import _build_spec, _load_config
+from main import _build_settings, _load_config
 
 
-def test_build_spec_includes_loss_config_from_xml(tmp_path: Path) -> None:
+def test_build_settings_includes_loss_config_from_xml(tmp_path: Path) -> None:
     config_path = _write_config(
         tmp_path,
         loss_block="""
@@ -25,14 +25,14 @@ def test_build_spec_includes_loss_config_from_xml(tmp_path: Path) -> None:
     </loss>
 """,
     )
-    spec = _build_spec(_load_config(str(config_path)))
-    assert spec.objective_config["weights"] == {
+    settings = _build_settings(_load_config(str(config_path)))
+    assert settings["objective_config"]["weights"] == {
         "curve": 2.0,
         "terminal": 1.0,
         "cancel": 3.0,
         "post": 4.0,
     }
-    assert spec.objective_config["eps"] == {
+    assert settings["objective_config"]["eps"] == {
         "curve": 0.1,
         "terminal": 0.2,
         "cancel": 0.3,
@@ -40,16 +40,16 @@ def test_build_spec_includes_loss_config_from_xml(tmp_path: Path) -> None:
     }
 
 
-def test_build_spec_writes_default_loss_config_when_loss_missing(tmp_path: Path) -> None:
+def test_build_settings_writes_default_loss_config_when_loss_missing(tmp_path: Path) -> None:
     config_path = _write_config(tmp_path, loss_block="")
-    spec = _build_spec(_load_config(str(config_path)))
-    assert spec.objective_config["weights"] == {
+    settings = _build_settings(_load_config(str(config_path)))
+    assert settings["objective_config"]["weights"] == {
         "curve": 1.0,
         "terminal": 1.0,
         "cancel": 1.0,
         "post": 1.0,
     }
-    assert spec.objective_config["eps"] == {
+    assert settings["objective_config"]["eps"] == {
         "curve": 1e-12,
         "terminal": 1e-12,
         "cancel": 1e-12,
