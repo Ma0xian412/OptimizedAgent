@@ -61,6 +61,7 @@ class ResourceRequest:
 class RunSpec:
     job: Job
     resource_request: ResourceRequest = field(default_factory=ResourceRequest)
+    result_output_path: str = ""
 
 
 @dataclass(frozen=True)

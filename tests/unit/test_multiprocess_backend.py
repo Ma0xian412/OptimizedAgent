@@ -25,70 +25,87 @@ def _request(run_spec: RunSpec, request_id: str = "req_1") -> ExecutionRequest:
     )
 
 
+def _write_script(tmp_path: object, body: str) -> str:
+    p = tmp_path / "script.py"  # type: ignore[union-attr]
+    p.write_text(body)
+    return str(p)
+
+
 class TestMultiprocessBackend:
-    def test_submit_returns_handle(self) -> None:
-        backend = MultiprocessExecutionBackend()
-        spec = RunSpec(
-            job=Job(command=[os.environ.get("SHELL", "sh"), "-c", "exit 0"]),
+    def test_submit_returns_handle(self, tmp_path: object) -> None:
+        body = (
+            "import os,json\n"
+            "p=os.environ.get('OCP_RESULT_OUTPUT_PATH','/tmp/out.json')\n"
+            "open(p,'w').write(json.dumps({'metrics':{},'diagnostics':{},'artifact_refs':[]}))\n"
         )
+        script = _write_script(tmp_path, body)
+        backend = MultiprocessExecutionBackend()
+        result_path = tmp_path / "r.json"  # type: ignore[union-attr]
+        spec = RunSpec(job=Job(script_path=script), result_output_path=str(result_path))
         handle = backend.submit(_request(spec))
         assert handle.handle_id.startswith("mp_")
         assert handle.state == JobStatus.RUNNING
         assert handle.request_id == "req_1"
 
     def test_wait_any_completed_exit_zero(self, tmp_path: object) -> None:
-        script = tmp_path / "ok.py"  # type: ignore[union-attr]
-        script.write_text("import sys\nsys.exit(0)\n")
+        body = (
+            "import os,json,sys\n"
+            "p=os.environ.get('OCP_RESULT_OUTPUT_PATH')\n"
+            "open(p,'w').write(json.dumps({'metrics':{'exit_code':0},'diagnostics':{},'artifact_refs':[]}))\n"
+            "sys.exit(0)\n"
+        )
         backend = MultiprocessExecutionBackend()
-        spec = RunSpec(job=Job(script_path=str(script)))
+        result_path = tmp_path / "r.json"  # type: ignore[union-attr]
+        spec = RunSpec(job=Job(script_path=_write_script(tmp_path, body)), result_output_path=str(result_path))
         handle = backend.submit(_request(spec))
         event = backend.wait_any([handle], timeout=5.0)
         assert event is not None
         assert event.kind == EventKind.COMPLETED
-        assert event.run_result is not None
-        assert event.run_result.metrics.get("exit_code") == 0
+        assert event.run_result is None
 
     def test_wait_any_failed_exit_nonzero(self, tmp_path: object) -> None:
         script = tmp_path / "fail.py"  # type: ignore[union-attr]
         script.write_text("import sys\nsys.exit(42)\n")
         backend = MultiprocessExecutionBackend()
-        spec = RunSpec(job=Job(script_path=str(script)))
+        result_path = tmp_path / "r.json"  # type: ignore[union-attr]
+        spec = RunSpec(job=Job(script_path=str(script)), result_output_path=str(result_path))
         handle = backend.submit(_request(spec))
         event = backend.wait_any([handle], timeout=5.0)
         assert event is not None
         assert event.kind == EventKind.FAILED
         assert event.error_code is not None
 
-    def test_wait_any_stdout_result_protocol(self, tmp_path: object) -> None:
-        payload = {"metrics": {"loss": 0.5}, "diagnostics": {"steps": 10}, "artifact_refs": []}
-        script = tmp_path / "result.py"  # type: ignore[union-attr]
-        line = "__OCP_RESULT__" + json.dumps(payload)
-        script.write_text(
-            f"print({repr(line)})\n"
-            "import sys\n"
-            "sys.exit(0)\n",
+    def test_wait_any_file_result(self, tmp_path: object) -> None:
+        body = (
+            "import os,json,sys\n"
+            "p=os.environ.get('OCP_RESULT_OUTPUT_PATH')\n"
+            'open(p,"w").write(json.dumps({"metrics":{"loss":0.5},"diagnostics":{"steps":10},"artifact_refs":[]}))\n'
+            "sys.exit(0)\n"
         )
         backend = MultiprocessExecutionBackend()
-        spec = RunSpec(job=Job(script_path=str(script)))
+        result_path = tmp_path / "r.json"  # type: ignore[union-attr]
+        spec = RunSpec(job=Job(script_path=_write_script(tmp_path, body)), result_output_path=str(result_path))
         handle = backend.submit(_request(spec))
         event = backend.wait_any([handle], timeout=5.0)
         assert event is not None
         assert event.kind == EventKind.COMPLETED
-        assert event.run_result is not None
-        assert event.run_result.metrics == {"loss": 0.5}
-        assert event.run_result.diagnostics == {"steps": 10}
+        assert event.run_result is None
+        data = json.loads((tmp_path / "r.json").read_text())  # type: ignore[union-attr]
+        assert data["metrics"]["loss"] == 0.5
+        assert data["diagnostics"]["steps"] == 10
 
     def test_wait_any_checkpoint_protocol(self, tmp_path: object) -> None:
-        script = tmp_path / "checkpoint.py"  # type: ignore[union-attr]
-        script.write_text(
+        body = (
             'print("__OCP_CHECKPOINT__" + \'{"step":1,"metrics":{"loss":0.8}}\')\n'
             'print("__OCP_CHECKPOINT__" + \'{"step":2,"metrics":{"loss":0.3}}\')\n'
-            'print("__OCP_RESULT__" + \'{"metrics":{"loss":0.3},"diagnostics":{},"artifact_refs":[]}\')\n'
-            "import sys\n"
-            "sys.exit(0)\n",
+            "import os,json,sys\n"
+            "p=os.environ.get('OCP_RESULT_OUTPUT_PATH')\n"
+            'open(p,"w").write(json.dumps({"metrics":{"loss":0.3},"diagnostics":{},"artifact_refs":[]}))\n'
+            "sys.exit(0)\n"
         )
         backend = MultiprocessExecutionBackend()
-        spec = RunSpec(job=Job(script_path=str(script)))
+        result_path = tmp_path / "r.json"  # type: ignore[union-attr]
+        spec = RunSpec(job=Job(script_path=_write_script(tmp_path, body)), result_output_path=str(result_path))
         handle = backend.submit(_request(spec))
         events: list = []
         while len(events) < 3:
@@ -111,7 +128,8 @@ class TestMultiprocessBackend:
         script = tmp_path / "sleep.py"  # type: ignore[union-attr]
         script.write_text("import time\ntime.sleep(60)\n")
         backend = MultiprocessExecutionBackend()
-        spec = RunSpec(job=Job(script_path=str(script)))
+        result_path = tmp_path / "r.json"  # type: ignore[union-attr]
+        spec = RunSpec(job=Job(script_path=str(script)), result_output_path=str(result_path))
         handle = backend.submit(_request(spec))
         backend.cancel(handle, "pruned")
         event = backend.wait_any([handle], timeout=3.0)
@@ -119,10 +137,12 @@ class TestMultiprocessBackend:
         assert event.kind == EventKind.CANCELLED
         assert event.reason == "pruned"
 
-    def test_wait_any_timeout_returns_none(self) -> None:
+    def test_wait_any_timeout_returns_none(self, tmp_path: object) -> None:
         backend = MultiprocessExecutionBackend()
+        result_path = tmp_path / "r.json"  # type: ignore[union-attr]
         spec = RunSpec(
             job=Job(command=[os.environ.get("SHELL", "sh"), "-c", "sleep 10"]),
+            result_output_path=str(result_path),
         )
         handle = backend.submit(_request(spec))
         event = backend.wait_any([handle], timeout=0.1)

@@ -93,6 +93,10 @@ class StubRunSpecBuilder:
         memory_gb = default_resources.get("memory_gb")
         if memory_mb is None and isinstance(memory_gb, int):
             memory_mb = memory_gb * 1024
+        path_digest = hashlib.sha256(
+            stable_json_serialize({"params": params, "dataset_id": dataset_id}).encode()
+        ).hexdigest()[:16]
+        result_output_path = f"/tmp/ocp_test/{path_digest}.json"
         return RunSpec(
             job=Job(
                 command=["python", "runner.py"],
@@ -102,6 +106,7 @@ class StubRunSpecBuilder:
                 cpu_cores=cpu if isinstance(cpu, int) else None,
                 memory_mb=memory_mb if isinstance(memory_mb, int) else None,
             ),
+            result_output_path=result_output_path,
         )
 
 

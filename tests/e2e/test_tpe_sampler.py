@@ -15,6 +15,7 @@ from optimization_control_plane.adapters.storage import (
     FileObjectiveCache,
     FileResultStore,
     FileRunCache,
+    JsonRunResultLoader,
 )
 from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrator
 from optimization_control_plane.domain.models import (
@@ -45,11 +46,15 @@ class TPESearchSpace:
 
 class SimpleRunSpecBuilder:
     def build(self, params: dict[str, Any], spec: ExperimentSpec, dataset_id: str) -> RunSpec:
+        path_digest = hashlib.sha256(
+            stable_json_serialize({"params": params, "dataset_id": dataset_id}).encode()
+        ).hexdigest()[:16]
         return RunSpec(
             job=Job(
                 command=["python", "backtest.py"],
                 args=[f"--{k}={params[k]}" for k in sorted(params)] + [f"--dataset={dataset_id}"],
-            )
+            ),
+            result_output_path=f"/tmp/ocp_e2e/{path_digest}.json",
         )
 
 
@@ -104,6 +109,7 @@ class TestTPESamplerE2E:
             run_cache=FileRunCache(os.path.join(str(tmp_path), "data")),
             objective_cache=FileObjectiveCache(os.path.join(str(tmp_path), "data")),
             result_store=FileResultStore(os.path.join(str(tmp_path), "data")),
+            run_result_loader=JsonRunResultLoader(),
         )
 
         spec_meta = {"dataset_version": "ds_v1", "engine_version": "e_v1"}

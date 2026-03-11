@@ -14,6 +14,7 @@ from optimization_control_plane.adapters.storage import (
     FileObjectiveCache,
     FileResultStore,
     FileRunCache,
+    JsonRunResultLoader,
 )
 from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrator
 from optimization_control_plane.domain.models import RunResult
@@ -64,6 +65,7 @@ def _build_orchestrator(
         run_cache=FileRunCache(os.path.join(tmp, "data")),
         objective_cache=FileObjectiveCache(os.path.join(tmp, "data")),
         result_store=FileResultStore(os.path.join(tmp, "data")),
+        run_result_loader=JsonRunResultLoader(),
     )
     return orch, exec_be
 

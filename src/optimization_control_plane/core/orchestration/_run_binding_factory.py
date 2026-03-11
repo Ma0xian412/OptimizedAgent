@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from optimization_control_plane.core.objective_definition import ObjectiveDefinition
-from optimization_control_plane.core.orchestration.inflight_registry import RunBinding
 from optimization_control_plane.core.orchestration._trial_utils import (
     scope_objective_key,
     validate_run_spec,
 )
+from optimization_control_plane.core.orchestration.inflight_registry import RunBinding
 from optimization_control_plane.domain.models import ExperimentSpec, GroundTruthData
 
 

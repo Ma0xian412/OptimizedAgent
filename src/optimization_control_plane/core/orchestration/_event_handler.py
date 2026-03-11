@@ -7,18 +7,17 @@ from typing import Any
 
 from optimization_control_plane.core.objective_definition import ObjectiveDefinition
 from optimization_control_plane.core.orchestration._metrics import Metrics
+from optimization_control_plane.core.orchestration._trial_utils import with_shared_run_attrs
 from optimization_control_plane.core.orchestration.inflight_registry import (
     InflightRegistry,
     RunBinding,
     TrialCohort,
 )
-from optimization_control_plane.core.orchestration._trial_utils import with_shared_run_attrs
 from optimization_control_plane.domain.enums import EventKind, JobStatus, TrialState
 from optimization_control_plane.domain.models import (
     ExecutionEvent,
     ExperimentSpec,
     GroundTruthData,
-    ObjectiveResult,
     SamplerProfile,
 )
 from optimization_control_plane.domain.state import StudyRuntimeState
@@ -26,6 +25,7 @@ from optimization_control_plane.ports.cache import ObjectiveCache, RunCache
 from optimization_control_plane.ports.execution_backend import ExecutionBackend
 from optimization_control_plane.ports.optimizer_backend import OptimizerBackend
 from optimization_control_plane.ports.result_store import ResultStore
+from optimization_control_plane.ports.run_result_loader import RunResultLoader
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,7 @@ class EventHandlerDeps:
     run_cache: RunCache
     objective_cache: ObjectiveCache
     result_store: ResultStore
+    run_result_loader: RunResultLoader
     inflight_registry: InflightRegistry
     study_state: StudyRuntimeState
     metrics: Metrics
@@ -64,7 +65,9 @@ def _handle_checkpoint(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
 def _handle_completed(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
     entry = deps.inflight_registry.get_by_handle(event.handle_id)
     run_result = event.run_result
-    assert run_result is not None, "COMPLETED event must carry run_result"
+    if run_result is None:
+        path = entry.run_spec.result_output_path
+        run_result = deps.run_result_loader.load(path)
     deps.run_cache.put(entry.run_key, run_result)
     deps.result_store.write_run_record(entry.run_key, run_result)
     objective = deps.objective_def.objective_evaluator.evaluate(run_result, deps.spec, deps.groundtruth)

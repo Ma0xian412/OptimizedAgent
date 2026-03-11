@@ -34,6 +34,8 @@ def validate_run_spec(run_spec: RunSpec) -> None:
     ):
         if amount is not None and amount <= 0:
             raise ValueError(f"run_spec.resource_request.{name} must be > 0 when provided")
+    if not run_spec.result_output_path or not run_spec.result_output_path.strip():
+        raise ValueError("run_spec.result_output_path must be a non-empty path")
 
 
 def scope_objective_key(raw_key: str, groundtruth_fingerprint: str) -> str:

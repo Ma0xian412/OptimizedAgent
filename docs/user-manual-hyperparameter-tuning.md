@@ -71,12 +71,17 @@ def build(
 **示例**：
 
 ```python
+import hashlib
 from optimization_control_plane.domain.models import ExperimentSpec, Job, RunSpec
 
 class MyRunSpecBuilder:
     def build(self, params: dict[str, object], spec: ExperimentSpec, dataset_id: str) -> RunSpec:
         args = [f"--{k}={v}" for k, v in sorted(params.items())] + [f"--dataset={dataset_id}"]
-        return RunSpec(job=Job(command=["python", "train.py"], args=args))
+        run_id = hashlib.sha256(str(args).encode()).hexdigest()[:16]
+        return RunSpec(
+            job=Job(command=["python", "train.py"], args=args),
+            result_output_path=f"/tmp/ocp_results/{run_id}.json",
+        )
 ```
 
 ---
@@ -374,6 +379,7 @@ orchestrator = TrialOrchestrator(
     run_cache=FileRunCache(path),
     objective_cache=FileObjectiveCache(path),
     result_store=FileResultStore(path),
+    run_result_loader=JsonRunResultLoader(),
 )
 
 orchestrator.start(spec=my_spec, settings=my_settings)
