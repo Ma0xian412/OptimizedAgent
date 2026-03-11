@@ -1,7 +1,7 @@
 """UT-1/2/3: spec_hash, run_key, objective_key stability."""
 from __future__ import annotations
 
-from optimization_control_plane.domain.models import RunSpec, compute_spec_hash
+from optimization_control_plane.domain.models import Job, RunSpec, compute_spec_hash
 from tests.conftest import (
     StubObjectiveKeyBuilder,
     StubRunKeyBuilder,
@@ -30,7 +30,7 @@ class TestRunKeyStability:
     def test_deterministic(self) -> None:
         builder = StubRunKeyBuilder()
         spec = make_spec()
-        rs = RunSpec(kind="test", config={"x": 1.0}, resources={})
+        rs = RunSpec(job=Job(command=["python"], args=["--x=1.0"]))
         k1 = builder.build(rs, spec)
         k2 = builder.build(rs, spec)
         assert k1 == k2
@@ -38,8 +38,8 @@ class TestRunKeyStability:
     def test_different_config_different_key(self) -> None:
         builder = StubRunKeyBuilder()
         spec = make_spec()
-        k1 = builder.build(RunSpec(kind="test", config={"x": 1.0}, resources={}), spec)
-        k2 = builder.build(RunSpec(kind="test", config={"x": 2.0}, resources={}), spec)
+        k1 = builder.build(RunSpec(job=Job(command=["python"], args=["--x=1.0"])), spec)
+        k2 = builder.build(RunSpec(job=Job(command=["python"], args=["--x=2.0"])), spec)
         assert k1 != k2
 
 

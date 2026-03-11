@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from optimization_control_plane.domain.enums import EventKind, SamplingMode
+from optimization_control_plane.domain.enums import EventKind, JobStatus, SamplingMode
 
 
 @dataclass(frozen=True)
@@ -41,10 +41,26 @@ class TrialHandle:
 
 
 @dataclass(frozen=True)
+class Job:
+    command: list[str] | None = None
+    script_path: str | None = None
+    args: list[str] = field(default_factory=list)
+    env: dict[str, str] = field(default_factory=dict)
+    working_dir: str | None = None
+
+
+@dataclass(frozen=True)
+class ResourceRequest:
+    cpu_cores: int | None = None
+    memory_mb: int | None = None
+    gpu_count: int | None = None
+    max_runtime_seconds: int | None = None
+
+
+@dataclass(frozen=True)
 class RunSpec:
-    kind: str
-    config: dict[str, Any]
-    resources: dict[str, Any]
+    job: Job
+    resource_request: ResourceRequest = field(default_factory=ResourceRequest)
 
 
 @dataclass(frozen=True)
@@ -82,7 +98,7 @@ class ExecutionRequest:
 class RunHandle:
     handle_id: str
     request_id: str
-    state: str
+    state: JobStatus
 
 
 @dataclass(frozen=True)

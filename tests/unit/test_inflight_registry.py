@@ -7,6 +7,7 @@ from optimization_control_plane.core.orchestration.inflight_registry import (
     InflightRegistry,
     TrialBinding,
 )
+from optimization_control_plane.domain.enums import JobStatus
 from optimization_control_plane.domain.models import RunHandle
 from tests.unit.test_search_space import FakeCtx
 
@@ -21,7 +22,7 @@ def _binding(trial_id: str, number: int = 0) -> TrialBinding:
 
 
 def _handle(hid: str) -> RunHandle:
-    return RunHandle(handle_id=hid, request_id="r1", state="RUNNING")
+    return RunHandle(handle_id=hid, request_id="r1", state=JobStatus.RUNNING)
 
 
 class TestInflightRegistry:

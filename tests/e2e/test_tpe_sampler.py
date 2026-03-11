@@ -19,6 +19,7 @@ from optimization_control_plane.adapters.storage import (
 from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrator
 from optimization_control_plane.domain.models import (
     ExperimentSpec,
+    Job,
     RunResult,
     RunSpec,
     compute_spec_hash,
@@ -42,12 +43,26 @@ class TPESearchSpace:
 
 class SimpleRunSpecBuilder:
     def build(self, params: dict[str, Any], spec: ExperimentSpec) -> RunSpec:
-        return RunSpec(kind="backtest", config=dict(params), resources={})
+        return RunSpec(
+            job=Job(
+                command=["python", "backtest.py"],
+                args=[f"--{k}={params[k]}" for k in sorted(params)],
+            )
+        )
 
 
 class DeterministicRunKeyBuilder:
     def build(self, run_spec: RunSpec, spec: ExperimentSpec) -> str:
-        payload = stable_json_serialize({"config": run_spec.config, "meta": spec.meta})
+        payload = stable_json_serialize({
+            "job": {
+                "command": run_spec.job.command,
+                "script_path": run_spec.job.script_path,
+                "args": run_spec.job.args,
+                "env": run_spec.job.env,
+                "working_dir": run_spec.job.working_dir,
+            },
+            "meta": spec.meta,
+        })
         return "run:" + hashlib.sha256(payload.encode()).hexdigest()[:24]
 
 

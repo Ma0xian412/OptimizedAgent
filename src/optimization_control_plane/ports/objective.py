@@ -20,6 +20,8 @@ class SearchSpace(Protocol):
 
 @runtime_checkable
 class RunSpecBuilder(Protocol):
+    """Build an executable run specification from sampled parameters."""
+
     def build(self, params: dict[str, object], spec: ExperimentSpec) -> RunSpec: ...
 
 

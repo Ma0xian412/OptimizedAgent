@@ -11,7 +11,7 @@ from optimization_control_plane.core.orchestration.inflight_registry import (
     InflightRegistry,
     TrialBinding,
 )
-from optimization_control_plane.domain.enums import EventKind, TrialState
+from optimization_control_plane.domain.enums import EventKind, JobStatus, TrialState
 from optimization_control_plane.domain.models import (
     ExecutionEvent,
     ExperimentSpec,
@@ -208,5 +208,16 @@ def _log_ctx(
         "objective_key": binding.objective_key,
         "handle_id": event.handle_id,
         "event_kind": event.kind.value,
+        "job_status": _event_kind_to_job_status(event.kind).value,
         "sampling_mode": deps.profile.mode.value,
     }
+
+
+def _event_kind_to_job_status(kind: EventKind) -> JobStatus:
+    mapping = {
+        EventKind.CHECKPOINT: JobStatus.RUNNING,
+        EventKind.COMPLETED: JobStatus.COMPLETED,
+        EventKind.FAILED: JobStatus.FAILED,
+        EventKind.CANCELLED: JobStatus.CANCELLED,
+    }
+    return mapping[kind]

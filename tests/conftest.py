@@ -7,7 +7,9 @@ from optimization_control_plane.domain.models import (
     Checkpoint,
     ExperimentSpec,
     GroundTruthData,
+    Job,
     ObjectiveResult,
+    ResourceRequest,
     RunResult,
     RunSpec,
     compute_spec_hash,
@@ -80,18 +82,40 @@ class StubSearchSpace:
 
 class StubRunSpecBuilder:
     def build(self, params: dict[str, Any], spec: ExperimentSpec) -> RunSpec:
+        default_resources = spec.execution_config.get("default_resources", {})
+        cpu = default_resources.get("cpu")
+        memory_mb = default_resources.get("memory_mb")
+        memory_gb = default_resources.get("memory_gb")
+        if memory_mb is None and isinstance(memory_gb, int):
+            memory_mb = memory_gb * 1024
         return RunSpec(
-            kind="test",
-            config=dict(params),
-            resources=spec.execution_config.get("default_resources", {}),
+            job=Job(
+                command=["python", "runner.py"],
+                args=[f"--{k}={params[k]}" for k in sorted(params)],
+            ),
+            resource_request=ResourceRequest(
+                cpu_cores=cpu if isinstance(cpu, int) else None,
+                memory_mb=memory_mb if isinstance(memory_mb, int) else None,
+            ),
         )
 
 
 class StubRunKeyBuilder:
     def build(self, run_spec: RunSpec, spec: ExperimentSpec) -> str:
         payload = stable_json_serialize({
-            "kind": run_spec.kind,
-            "config": run_spec.config,
+            "job": {
+                "command": run_spec.job.command,
+                "script_path": run_spec.job.script_path,
+                "args": run_spec.job.args,
+                "env": run_spec.job.env,
+                "working_dir": run_spec.job.working_dir,
+            },
+            "resource_request": {
+                "cpu_cores": run_spec.resource_request.cpu_cores,
+                "memory_mb": run_spec.resource_request.memory_mb,
+                "gpu_count": run_spec.resource_request.gpu_count,
+                "max_runtime_seconds": run_spec.resource_request.max_runtime_seconds,
+            },
             "meta": spec.meta,
         })
         return "run:" + hashlib.sha256(payload.encode()).hexdigest()[:16]

@@ -16,6 +16,7 @@ from optimization_control_plane.domain.models import (
     ExecutionRequest,
     ExperimentSpec,
     GroundTruthData,
+    RunSpec,
     SamplerProfile,
 )
 from optimization_control_plane.domain.state import ResourceState, StudyRuntimeState
@@ -65,6 +66,7 @@ def _plan_and_fill(
 
         params = objective_def.search_space.sample(ctx, spec)
         run_spec = objective_def.run_spec_builder.build(params, spec)
+        _validate_run_spec(run_spec)
         run_key = objective_def.run_key_builder.build(run_spec, spec)
         raw_obj_key = objective_def.objective_key_builder.build(
             run_key, spec.objective_config
@@ -148,6 +150,44 @@ def _submit_leader(
         "submitted execution",
         extra={**log_extra, "handle_id": handle.handle_id, "request_id": request.request_id},
     )
+
+
+def _validate_run_spec(run_spec: RunSpec) -> None:
+    command = run_spec.job.command
+    script_path = run_spec.job.script_path
+    has_command = command is not None and len(command) > 0
+    has_script = script_path is not None and script_path.strip() != ""
+    if has_command == has_script:
+        raise ValueError("run_spec.job must set exactly one of command or script_path")
+
+    if has_command:
+        assert command is not None
+        if any((not isinstance(part, str) or part == "") for part in command):
+            raise ValueError("run_spec.job.command must contain non-empty strings")
+    if has_script:
+        assert script_path is not None
+        if not isinstance(script_path, str) or script_path.strip() == "":
+            raise ValueError("run_spec.job.script_path must be a non-empty string")
+    if run_spec.job.working_dir is not None and run_spec.job.working_dir.strip() == "":
+        raise ValueError("run_spec.job.working_dir must be non-empty when provided")
+
+    for key, value in run_spec.job.env.items():
+        if (
+            not isinstance(key, str)
+            or not isinstance(value, str)
+            or key == ""
+            or value == ""
+        ):
+            raise ValueError("run_spec.job.env keys and values must be non-empty strings")
+
+    for name, amount in (
+        ("cpu_cores", run_spec.resource_request.cpu_cores),
+        ("memory_mb", run_spec.resource_request.memory_mb),
+        ("gpu_count", run_spec.resource_request.gpu_count),
+        ("max_runtime_seconds", run_spec.resource_request.max_runtime_seconds),
+    ):
+        if amount is not None and amount <= 0:
+            raise ValueError(f"run_spec.resource_request.{name} must be > 0 when provided")
 
 
 def _slots_available(
