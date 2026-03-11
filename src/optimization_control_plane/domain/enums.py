@@ -25,6 +25,15 @@ class EventKind(str, Enum):
 
 
 @unique
+class JobStatus(str, Enum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+@unique
 class TrialState(str, Enum):
     COMPLETE = "COMPLETE"
     PRUNED = "PRUNED"

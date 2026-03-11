@@ -18,7 +18,7 @@ from optimization_control_plane.adapters.storage import (
     FileRunCache,
 )
 from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrator
-from optimization_control_plane.domain.enums import EventKind
+from optimization_control_plane.domain.enums import EventKind, JobStatus
 from optimization_control_plane.domain.models import ExecutionEvent, ExecutionRequest, RunHandle, RunResult
 from tests.conftest import (
     StubGroundTruthProvider,
@@ -42,7 +42,7 @@ class DelayedCompletionBackend:
         self._handle = RunHandle(
             handle_id=f"fh_{uuid.uuid4().hex[:12]}",
             request_id=request.request_id,
-            state="RUNNING",
+            state=JobStatus.RUNNING,
         )
         self.submitted.set()
         return self._handle

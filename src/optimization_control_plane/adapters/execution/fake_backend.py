@@ -5,7 +5,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 
-from optimization_control_plane.domain.enums import EventKind
+from optimization_control_plane.domain.enums import EventKind, JobStatus
 from optimization_control_plane.domain.models import (
     Checkpoint,
     ExecutionEvent,
@@ -47,7 +47,7 @@ class FakeExecutionBackend:
         handle = RunHandle(
             handle_id=handle_id,
             request_id=request.request_id,
-            state="RUNNING",
+            state=JobStatus.RUNNING,
         )
         self._handles[handle_id] = handle
 

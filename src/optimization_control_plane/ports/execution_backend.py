@@ -11,6 +11,8 @@ from optimization_control_plane.domain.models import (
 
 @runtime_checkable
 class ExecutionBackend(Protocol):
+    """Execution backend consumes executable RunSpec and emits lifecycle events."""
+
     def submit(self, request: ExecutionRequest) -> RunHandle: ...
 
     def wait_any(
