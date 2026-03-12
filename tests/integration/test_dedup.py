@@ -41,7 +41,7 @@ class TestDedup:
 
         exec_be = FakeExecutionBackend()
         exec_be.set_default_script(FakeRunScript(
-            run_result=RunResult(metrics={"metric_1": 0.5}, diagnostics={}, artifact_refs=[]),
+            run_result=RunResult(payload={"metrics": {"metric_1": 0.5}, "artifact_refs": []}),
         ))
 
         obj_def = ObjectiveDefinition(

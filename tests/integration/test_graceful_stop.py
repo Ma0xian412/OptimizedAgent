@@ -46,7 +46,7 @@ class DelayedCompletionBackend:
         result_file = Path(request.run_spec.result_path)
         result_file.parent.mkdir(parents=True, exist_ok=True)
         result_file.write_text(
-            '{"metrics":{"metric_1":0.5},"diagnostics":{},"artifact_refs":[]}',
+            '{"payload":{"metrics":{"metric_1":0.5},"diagnostics":{},"artifact_refs":[]}}',
             encoding="utf-8",
         )
         self._handle = RunHandle(

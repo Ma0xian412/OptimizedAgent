@@ -3,7 +3,6 @@ from __future__ import annotations
 import csv
 import os
 from dataclasses import dataclass
-from typing import Any
 
 from optimization_control_plane.domain.models import RunResult, RunSpec
 
@@ -37,12 +36,14 @@ class BackTestRunResultLoaderAdapter:
         execution_rows = _read_csv_rows(artifacts.execution_path)
         order_rows = _read_csv_rows(artifacts.order_path)
         cancel_rows = _read_csv_rows(artifacts.cancel_path)
-        metrics = _build_metrics(done_rows, execution_rows, order_rows, cancel_rows)
-        diagnostics = _build_diagnostics(artifacts)
         return RunResult(
-            metrics=metrics,
-            diagnostics=diagnostics,
-            artifact_refs=_collect_artifact_refs(artifacts),
+            payload=_build_payload(
+                artifacts=artifacts,
+                done_rows=done_rows,
+                execution_rows=execution_rows,
+                order_rows=order_rows,
+                cancel_rows=cancel_rows,
+            )
         )
 
 
@@ -143,61 +144,29 @@ def _read_csv_rows(path: str) -> list[dict[str, str]]:
         return [dict(row) for row in reader]
 
 
-def _build_metrics(
+def _build_payload(
+    *,
+    artifacts: _ResolvedArtifacts,
     done_rows: list[dict[str, str]],
     execution_rows: list[dict[str, str]],
     order_rows: list[dict[str, str]],
     cancel_rows: list[dict[str, str]],
-) -> dict[str, Any]:
-    total_order_volume = sum(_as_int(row, "Volume", "OrderInfo") for row in order_rows)
-    total_filled_volume = sum(_as_int(row, "Volume", "ExecutionDetail") for row in execution_rows)
-    total_notional = sum(_as_float(row, "Price", "ExecutionDetail") * _as_int(row, "Volume", "ExecutionDetail") for row in execution_rows)
-    filled_count = sum(1 for row in done_rows if row.get("OrderTradeState") == "A")
-    partial_count = sum(1 for row in done_rows if row.get("OrderTradeState") == "P")
-    avg_latency = _average_latency(execution_rows)
+) -> dict[str, object]:
     return {
-        "done_count": len(done_rows),
-        "execution_count": len(execution_rows),
-        "order_count": len(order_rows),
-        "cancel_request_count": len(cancel_rows),
-        "filled_order_count": filled_count,
-        "partial_order_count": partial_count,
-        "unfilled_order_count": max(0, len(done_rows) - filled_count - partial_count),
-        "total_order_volume": total_order_volume,
-        "total_filled_volume": total_filled_volume,
-        "fill_rate_by_qty": _ratio(total_filled_volume, total_order_volume),
-        "fill_rate_by_order": _ratio(filled_count, len(order_rows)),
-        "avg_fill_price": _ratio(total_notional, total_filled_volume),
-        "avg_execution_latency_tick": avg_latency,
-    }
-
-
-def _average_latency(execution_rows: list[dict[str, str]]) -> float:
-    if not execution_rows:
-        return 0.0
-    total = 0
-    for row in execution_rows:
-        recv_tick = _as_int(row, "RecvTick", "ExecutionDetail")
-        exch_tick = _as_int(row, "ExchTick", "ExecutionDetail")
-        total += recv_tick - exch_tick
-    return total / len(execution_rows)
-
-
-def _ratio(numerator: float, denominator: float) -> float:
-    if denominator <= 0:
-        return 0.0
-    return numerator / denominator
-
-
-def _build_diagnostics(artifacts: _ResolvedArtifacts) -> dict[str, Any]:
-    return {
-        "result_layout": artifacts.layout,
-        "result_base_path": artifacts.base_path,
+        "layout": artifacts.layout,
+        "base_path": artifacts.base_path,
         "table_paths": {
             "DoneInfo": artifacts.done_path,
             "ExecutionDetail": artifacts.execution_path,
             "OrderInfo": artifacts.order_path,
             "CancelRequest": artifacts.cancel_path,
+        },
+        "artifact_refs": _collect_artifact_refs(artifacts),
+        "table_rows": {
+            "DoneInfo": done_rows,
+            "ExecutionDetail": execution_rows,
+            "OrderInfo": order_rows,
+            "CancelRequest": cancel_rows,
         },
     }
 
@@ -211,19 +180,3 @@ def _collect_artifact_refs(artifacts: _ResolvedArtifacts) -> list[str]:
         artifacts.cancel_path,
         ]
     )
-
-
-def _as_int(row: dict[str, str], key: str, table_name: str) -> int:
-    value = row.get(key, "")
-    try:
-        return int(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"invalid int in {table_name}.{key}: {value!r}") from exc
-
-
-def _as_float(row: dict[str, str], key: str, table_name: str) -> float:
-    value = row.get(key, "")
-    try:
-        return float(value)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"invalid float in {table_name}.{key}: {value!r}") from exc

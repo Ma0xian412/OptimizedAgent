@@ -163,11 +163,20 @@ class StubObjectiveEvaluator:
         spec: ExperimentSpec,
         groundtruth: GroundTruthData,
     ) -> ObjectiveResult:
-        value = run_result.metrics.get(self._metric, 0.0)
+        payload = run_result.payload
+        if not isinstance(payload, dict):
+            raise TypeError("run_result.payload must be a dict for StubObjectiveEvaluator")
+        metrics = payload.get("metrics", {})
+        if not isinstance(metrics, dict):
+            raise TypeError("run_result.payload.metrics must be a dict for StubObjectiveEvaluator")
+        artifact_refs = payload.get("artifact_refs", [])
+        if not isinstance(artifact_refs, list):
+            raise TypeError("run_result.payload.artifact_refs must be a list for StubObjectiveEvaluator")
+        value = metrics.get(self._metric, 0.0)
         return ObjectiveResult(
             value=float(value),
             attrs={"metric": self._metric, "groundtruth_fingerprint": groundtruth.fingerprint},
-            artifact_refs=list(run_result.artifact_refs),
+            artifact_refs=list(artifact_refs),
         )
 
 

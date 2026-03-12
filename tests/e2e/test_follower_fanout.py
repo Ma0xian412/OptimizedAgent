@@ -83,7 +83,7 @@ class TestLeaderCompleteFollowerFanout:
     def test_followers_inherit_complete(self, tmp_path: Any) -> None:
         script = FakeRunScript(
             run_result=RunResult(
-                metrics={"metric_1": 0.5}, diagnostics={}, artifact_refs=[]
+                payload={"metrics": {"metric_1": 0.5}, "artifact_refs": []}
             ),
         )
         orch, _ = _make_orchestrator(str(tmp_path), script)

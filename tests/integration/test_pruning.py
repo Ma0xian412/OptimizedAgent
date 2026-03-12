@@ -52,7 +52,7 @@ class TestPruning:
                 Checkpoint(step=3, metrics={"loss": 100.0}),
             ],
             final_event=EventKind.COMPLETED,
-            run_result=RunResult(metrics={"metric_1": 0.5}, diagnostics={}, artifact_refs=[]),
+            run_result=RunResult(payload={"metrics": {"metric_1": 0.5}, "artifact_refs": []}),
         ))
 
         obj_def = ObjectiveDefinition(

@@ -51,23 +51,20 @@ class TestBackTestRunResultLoaderAdapter:
 
         run_spec = RunSpec(job=Job(command=["python3", "main.py"]), result_path=str(result_root))
         result = BackTestRunResultLoaderAdapter().load(run_spec)
+        payload = result.payload
+        assert isinstance(payload, dict)
 
-        assert result.metrics["done_count"] == 2
-        assert result.metrics["execution_count"] == 2
-        assert result.metrics["order_count"] == 2
-        assert result.metrics["cancel_request_count"] == 1
-        assert result.metrics["filled_order_count"] == 1
-        assert result.metrics["partial_order_count"] == 1
-        assert result.metrics["fill_rate_by_qty"] == pytest.approx(0.6)
-        assert result.metrics["fill_rate_by_order"] == pytest.approx(0.5)
-        assert result.metrics["avg_fill_price"] == pytest.approx(100.3333333)
-        assert result.metrics["avg_execution_latency_tick"] == pytest.approx(12.5)
-        assert result.diagnostics["result_layout"] == "directory"
-        assert "contract_info" not in result.diagnostics
-        assert "receipt_type_counts" not in result.diagnostics
-        assert "log_line_count" not in result.diagnostics
-        assert len(result.artifact_refs) == 4
-        assert all(path.endswith(".csv") for path in result.artifact_refs)
+        assert payload["layout"] == "directory"
+        assert isinstance(payload["base_path"], str)
+        assert len(payload["artifact_refs"]) == 4
+        assert all(path.endswith(".csv") for path in payload["artifact_refs"])
+        assert payload["table_rows"]["DoneInfo"][0]["OrderTradeState"] == "A"
+        assert payload["table_rows"]["DoneInfo"][1]["OrderTradeState"] == "P"
+        assert len(payload["table_rows"]["ExecutionDetail"]) == 2
+        assert len(payload["table_rows"]["OrderInfo"]) == 2
+        assert len(payload["table_rows"]["CancelRequest"]) == 1
+        assert "metrics" not in payload
+        assert "diagnostics" not in payload
 
     def test_load_prefix_layout(self, tmp_path: Path) -> None:
         prefix = tmp_path / "prefix" / "result"
@@ -94,12 +91,14 @@ class TestBackTestRunResultLoaderAdapter:
 
         run_spec = RunSpec(job=Job(command=["python3", "main.py"]), result_path=str(prefix))
         result = BackTestRunResultLoaderAdapter().load(run_spec)
+        payload = result.payload
+        assert isinstance(payload, dict)
 
-        assert result.metrics["done_count"] == 1
-        assert result.metrics["execution_count"] == 1
-        assert result.metrics["order_count"] == 1
-        assert result.metrics["fill_rate_by_qty"] == pytest.approx(1.0)
-        assert result.diagnostics["result_layout"] == "prefix"
+        assert payload["layout"] == "prefix"
+        assert len(payload["table_rows"]["DoneInfo"]) == 1
+        assert len(payload["table_rows"]["ExecutionDetail"]) == 1
+        assert len(payload["table_rows"]["OrderInfo"]) == 1
+        assert len(payload["table_rows"]["CancelRequest"]) == 0
 
     def test_missing_required_tables_raises(self, tmp_path: Path) -> None:
         result_root = tmp_path / "broken_result"

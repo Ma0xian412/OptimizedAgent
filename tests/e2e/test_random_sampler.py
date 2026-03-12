@@ -82,9 +82,11 @@ class TestRandomSamplerE2E:
         exec_be = FakeExecutionBackend()
         exec_be.set_default_script(FakeRunScript(
             run_result=RunResult(
-                metrics={"metric_1": 0.42},
-                diagnostics={"runtime_sec": 1.0},
-                artifact_refs=[],
+                payload={
+                    "metrics": {"metric_1": 0.42},
+                    "diagnostics": {"runtime_sec": 1.0},
+                    "artifact_refs": [],
+                },
             ),
         ))
 
