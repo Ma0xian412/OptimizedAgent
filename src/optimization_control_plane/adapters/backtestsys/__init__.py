@@ -7,9 +7,13 @@ from optimization_control_plane.adapters.backtestsys.run_spec_builder_adapter im
 from optimization_control_plane.adapters.backtestsys.run_key_builder_adapter import (
     BackTestRunKeyBuilderAdapter,
 )
+from optimization_control_plane.adapters.backtestsys.objective_key_builder_adapter import (
+    BackTestObjectiveKeyBuilderAdapter,
+)
 
 __all__ = [
     "BackTestSearchSpaceAdapter",
     "BackTestRunSpecBuilderAdapter",
     "BackTestRunKeyBuilderAdapter",
+    "BackTestObjectiveKeyBuilderAdapter",
 ]
