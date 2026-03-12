@@ -175,16 +175,13 @@ def enumerate(self, spec: ExperimentSpec) -> tuple[str, ...]: ...
 **接口**：
 
 ```python
-def load(self, spec: ExperimentSpec) -> GroundTruthData: ...
-def load_for_dataset(
-    self,
-    spec: ExperimentSpec,
-    dataset_id: str,
-) -> GroundTruthData: ...
+def load(self, spec: ExperimentSpec, dataset_id: str) -> GroundTruthData: ...
 ```
 
 **说明**：
 
+- 使用 `dataset_id=""` 表示实验级（共享）ground truth
+- 使用具体 `dataset_id` 可按 dataset 粒度加载不同的 ground truth
 - `GroundTruthData` 需包含非空的 `fingerprint`
 - 若无 ground truth，可返回固定指纹的占位数据，在 `ObjectiveEvaluator` 中忽略
 
