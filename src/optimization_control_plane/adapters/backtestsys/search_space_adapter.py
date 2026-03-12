@@ -6,11 +6,12 @@ from optimization_control_plane.domain.models import ExperimentSpec
 from optimization_control_plane.ports.optimizer_backend import TrialContext
 
 _SEARCH_SPACE_KEY = "backtest_search_space"
+_FIXED_PARAMS_KEY = "backtest_fixed_params"
 _ATTR_KEY = "backtest_config_patch"
 
 
-class BackTestSearchSpaceAdapter:
-    """Sample BackTestSys config parameters from trial context."""
+class BackTestDelaySearchSpaceAdapter:
+    """Sample one delay and keep two core params fixed."""
 
     def sample(
         self,
@@ -18,6 +19,36 @@ class BackTestSearchSpaceAdapter:
         spec: ExperimentSpec,
     ) -> dict[str, object]:
         space = _read_search_space(spec)
+        fixed = _read_fixed_params(spec)
+        delay = ctx.suggest_int("delay", *_read_int_range(space, "delay"))
+        params: dict[str, object] = {
+            "time_scale_lambda": _read_required_float(
+                fixed,
+                key="time_scale_lambda",
+                owner=_FIXED_PARAMS_KEY,
+            ),
+            "cancel_bias_k": _read_required_float(
+                fixed,
+                key="cancel_bias_k",
+                owner=_FIXED_PARAMS_KEY,
+            ),
+            "delay_in": delay,
+            "delay_out": delay,
+        }
+        ctx.set_user_attr(_ATTR_KEY, params)
+        return params
+
+
+class BackTestCoreParamsSearchSpaceAdapter:
+    """Sample two core params and keep one delay fixed."""
+
+    def sample(
+        self,
+        ctx: TrialContext,
+        spec: ExperimentSpec,
+    ) -> dict[str, object]:
+        space = _read_search_space(spec)
+        fixed = _read_fixed_params(spec)
         time_scale_lambda = ctx.suggest_float(
             "time_scale_lambda",
             *_read_float_range(space, "time_scale_lambda"),
@@ -26,14 +57,12 @@ class BackTestSearchSpaceAdapter:
             "cancel_bias_k",
             *_read_float_range(space, "cancel_bias_k"),
         )
-        delay_in = ctx.suggest_int("delay_in", *_read_int_range(space, "delay_in"))
-        delay_out = ctx.suggest_int("delay_out", *_read_int_range(space, "delay_out"))
-
+        delay = _read_required_int(fixed, key="delay", owner=_FIXED_PARAMS_KEY)
         params: dict[str, object] = {
             "time_scale_lambda": time_scale_lambda,
             "cancel_bias_k": cancel_bias_k,
-            "delay_in": delay_in,
-            "delay_out": delay_out,
+            "delay_in": delay,
+            "delay_out": delay,
         }
         ctx.set_user_attr(_ATTR_KEY, params)
         return params
@@ -42,9 +71,14 @@ class BackTestSearchSpaceAdapter:
 def _read_search_space(spec: ExperimentSpec) -> dict[str, Any]:
     raw = spec.objective_config.get(_SEARCH_SPACE_KEY)
     if not isinstance(raw, dict):
-        raise ValueError(
-            f"spec.objective_config.{_SEARCH_SPACE_KEY} must be a dict"
-        )
+        raise ValueError(f"spec.objective_config.{_SEARCH_SPACE_KEY} must be a dict")
+    return raw
+
+
+def _read_fixed_params(spec: ExperimentSpec) -> dict[str, Any]:
+    raw = spec.objective_config.get(_FIXED_PARAMS_KEY)
+    if not isinstance(raw, dict):
+        raise ValueError(f"spec.objective_config.{_FIXED_PARAMS_KEY} must be a dict")
     return raw
 
 
@@ -74,3 +108,17 @@ def _read_int_range(space: dict[str, Any], key: str) -> tuple[int, int]:
     if low > high:
         raise ValueError(f"{_SEARCH_SPACE_KEY}.{key} low must be <= high")
     return low, high
+
+
+def _read_required_float(source: dict[str, Any], *, key: str, owner: str) -> float:
+    raw = source.get(key)
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        raise ValueError(f"{owner}.{key} must be numeric")
+    return float(raw)
+
+
+def _read_required_int(source: dict[str, Any], *, key: str, owner: str) -> int:
+    raw = source.get(key)
+    if not isinstance(raw, int) or isinstance(raw, bool):
+        raise ValueError(f"{owner}.{key} must be int")
+    return raw

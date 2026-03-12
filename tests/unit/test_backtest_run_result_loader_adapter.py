@@ -101,3 +101,34 @@ class TestBackTestRunResultLoaderAdapter:
         run_spec = RunSpec(job=Job(command=["python3", "main.py"]), result_path=str(run_dir))
         with pytest.raises(FileNotFoundError):
             BackTestRunResultLoaderAdapter().load(run_spec)
+
+    def test_load_reads_tables_from_nested_result_subdir(self, tmp_path: Path) -> None:
+        run_dir = tmp_path / "result_dir"
+        nested = run_dir / "run_result_TEST_20260312_000001"
+        _write_csv(
+            nested / "DoneInfo.csv",
+            ["PartitionDay", "ContractId", "OrderId", "DoneTime", "OrderTradeState", "MachineName"],
+            [[20260311, 1, 1, 1000, "N", "m1"]],
+        )
+        _write_csv(
+            nested / "ExecutionDetail.csv",
+            ["PartitionDay", "RecvTick", "ExchTick", "OrderId", "ContractId", "Price", "Volume", "OrderDirection", "MachineName"],
+            [],
+        )
+        _write_csv(
+            nested / "OrderInfo.csv",
+            ["PartitionDay", "ContractId", "OrderId", "LimitPrice", "Volume", "OrderDirection", "SentTime", "MachineName"],
+            [[20260311, 1, 1, 100.0, 1, "Buy", 10, "m1"]],
+        )
+        _write_csv(
+            nested / "CancelRequest.csv",
+            ["PartitionDay", "ContractId", "OrderId", "CancelSentTime", "MachineName"],
+            [],
+        )
+
+        run_spec = RunSpec(job=Job(command=["python3", "main.py"]), result_path=str(run_dir))
+        result = BackTestRunResultLoaderAdapter().load(run_spec)
+        payload = result.payload
+
+        assert payload["DoneInfo"][0]["OrderTradeState"] == "N"
+        assert len(payload["ExecutionDetail"]) == 0
