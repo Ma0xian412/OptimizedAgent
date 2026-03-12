@@ -284,7 +284,7 @@ class TrialOrchestrator:
         groundtruth_cfg = spec.objective_config.get("groundtruth")
         if not isinstance(groundtruth_cfg, dict):
             raise ValueError("spec.objective_config.groundtruth must be a dict")
-        data = self._groundtruth_provider.load(spec)
+        data = self._groundtruth_provider.load(spec, dataset_id="")
         if not isinstance(data, GroundTruthData):
             raise TypeError("groundtruth provider must return GroundTruthData")
         if not data.fingerprint:

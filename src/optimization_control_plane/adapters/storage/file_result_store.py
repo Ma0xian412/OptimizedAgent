@@ -25,9 +25,7 @@ class FileResultStore:
         path = self._base / _RUN_RECORDS_DIR / _safe_filename(run_key)
         _atomic_write_json(path, {
             "run_key": run_key,
-            "metrics": run_result.metrics,
-            "diagnostics": run_result.diagnostics,
-            "artifact_refs": run_result.artifact_refs,
+            "payload": run_result.payload,
         })
 
     def write_trial_result(
@@ -36,7 +34,6 @@ class FileResultStore:
         path = self._base / _TRIAL_RESULTS_DIR / _safe_filename(trial_id)
         _atomic_write_json(path, {
             "trial_id": trial_id,
-            "value": objective_result.value,
             "attrs": objective_result.attrs,
             "artifact_refs": objective_result.artifact_refs,
         })

@@ -21,18 +21,12 @@ class FileRunCache:
         data = _read_json(self._path(run_key))
         if data is None:
             return None
-        return RunResult(
-            metrics=data["metrics"],
-            diagnostics=data["diagnostics"],
-            artifact_refs=data.get("artifact_refs", []),
-        )
+        return RunResult(payload=data["payload"])
 
     def put(self, run_key: str, run_result: RunResult) -> None:
         _atomic_write_json(self._path(run_key), {
             "run_key": run_key,
-            "metrics": run_result.metrics,
-            "diagnostics": run_result.diagnostics,
-            "artifact_refs": run_result.artifact_refs,
+            "payload": run_result.payload,
         })
 
     def _path(self, run_key: str) -> Path:

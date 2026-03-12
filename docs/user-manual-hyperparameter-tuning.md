@@ -129,6 +129,8 @@ def evaluate(
 
 **说明**：
 
+- `RunResult` 仅作为原始结果承载对象，核心字段是 `payload`
+- `ObjectiveEvaluator` 负责从 `run_result.payload` 中自行解析出业务指标（如 `metrics`、`artifact_refs`）
 - `ObjectiveResult` 包含 `value: float`、`attrs: dict[str, Any]`、`artifact_refs: list[str]`
 - 若业务不涉及 ground truth，可返回占位 `GroundTruthData`，在评估逻辑中忽略
 
@@ -173,16 +175,13 @@ def enumerate(self, spec: ExperimentSpec) -> tuple[str, ...]: ...
 **接口**：
 
 ```python
-def load(self, spec: ExperimentSpec) -> GroundTruthData: ...
-def load_for_dataset(
-    self,
-    spec: ExperimentSpec,
-    dataset_id: str,
-) -> GroundTruthData: ...
+def load(self, spec: ExperimentSpec, dataset_id: str) -> GroundTruthData: ...
 ```
 
 **说明**：
 
+- 使用 `dataset_id=""` 表示实验级（共享）ground truth
+- 使用具体 `dataset_id` 可按 dataset 粒度加载不同的 ground truth
 - `GroundTruthData` 需包含非空的 `fingerprint`
 - 若无 ground truth，可返回固定指纹的占位数据，在 `ObjectiveEvaluator` 中忽略
 
@@ -409,3 +408,52 @@ orchestrator.start(spec=my_spec, settings=my_settings)
 - 完整 E2E 示例：`tests/e2e/test_random_sampler.py`、`tests/e2e/test_tpe_sampler.py`
 - 开发设计文档：`docs/development-guide.md`
 - Port 定义位置：`src/optimization_control_plane/ports/`
+
+---
+
+## 9. BackTestSys 适配器：单文件夹多日数据（思路 A）
+
+当数据集中在同一文件夹（如某合约 20250101–20250131 共 31 份 .pkl），采用 **预生成 dataset_paths** 方案。
+
+### 9.1 预生成 dataset_paths（由用户自行实现）
+
+在启动实验前，用户需自行扫描数据目录生成 `dataset_id -> path` 映射，并注入 `execution_config`。框架不提供预生成工具。
+
+### 9.2 注入 execution_config
+
+将生成的 `dataset_paths` 写入 `backtest_run_spec`：
+
+```python
+execution_config = {
+    "executor_kind": "backtest",
+    "default_resources": {"cpu": 2},
+    "backtest_run_spec": {
+        "backtestsys_root": "/path/to/BackTestSys",
+        "base_config_path": "/path/to/config.xml",
+        "output_root_dir": "/tmp/ocp_artifacts",
+        "dataset_paths": dataset_paths,  # 预生成结果
+    },
+}
+```
+
+### 9.3 使用 BackTestDatasetEnumeratorAdapter
+
+```python
+from optimization_control_plane.adapters.backtestsys import (
+    BackTestDatasetEnumeratorAdapter,
+    BackTestRunSpecBuilderAdapter,
+    # ... 其他适配器
+)
+
+obj_def = ObjectiveDefinition(
+    dataset_enumerator=BackTestDatasetEnumeratorAdapter(),
+    run_spec_builder=BackTestRunSpecBuilderAdapter(),
+    # ...
+)
+```
+
+### 9.4 控制每个 trial 的 dataset 子集
+
+- **全量**：不设 `meta.dataset_ids`，枚举器返回 `dataset_paths` 的全部 key（按字典序）。
+- **单日**：`meta={"dataset_ids": ["20250115"]}`。
+- **按周/自定义子集**：`meta={"dataset_ids": ["20250101", "20250102", ..., "20250107"]}`。

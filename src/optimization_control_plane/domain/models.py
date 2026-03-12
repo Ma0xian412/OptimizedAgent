@@ -72,16 +72,22 @@ class Checkpoint:
 
 @dataclass(frozen=True)
 class RunResult:
-    metrics: dict[str, Any]
-    diagnostics: dict[str, Any]
-    artifact_refs: list[str] = field(default_factory=list)
+    payload: Any
+
+
+OBJECTIVE_VALUE_KEY = "value"
 
 
 @dataclass(frozen=True)
 class ObjectiveResult:
-    value: float
+    """Objective result with attrs dict; primary objective must be in attrs[OBJECTIVE_VALUE_KEY]."""
+
     attrs: dict[str, Any]
     artifact_refs: list[str] = field(default_factory=list)
+
+    @property
+    def value(self) -> float:
+        return float(self.attrs[OBJECTIVE_VALUE_KEY])
 
 
 @dataclass(frozen=True)

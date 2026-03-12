@@ -12,7 +12,6 @@ from optimization_control_plane.adapters.policies import (
 )
 from optimization_control_plane.adapters.storage import (
     FileObjectiveCache,
-    FileRunResultLoader,
     FileResultStore,
     FileRunCache,
 )
@@ -24,6 +23,7 @@ from tests.conftest import (
     StubObjectiveEvaluator,
     StubObjectiveKeyBuilder,
     StubRunKeyBuilder,
+    StubRunResultLoader,
     StubRunSpecBuilder,
     StubSearchSpace,
     StubTrialResultAggregator,
@@ -41,7 +41,7 @@ def _build_orchestrator(
     backend = OptunaBackendAdapter(storage_dsn=f"sqlite:///{db}")
     exec_be = FakeExecutionBackend()
     exec_be.set_default_script(FakeRunScript(
-        run_result=RunResult(metrics={"metric_1": 0.1}, diagnostics={}, artifact_refs=[]),
+        run_result=RunResult(payload={"metrics": {"metric_1": 0.1}, "artifact_refs": []}),
     ))
 
     obj_def = ObjectiveDefinition(
@@ -62,7 +62,7 @@ def _build_orchestrator(
         execution_backend=exec_be,
         parallelism_policy=AsyncFillParallelismPolicy(),
         dispatch_policy=SubmitNowDispatchPolicy(),
-        run_result_loader=FileRunResultLoader(),
+        run_result_loader=StubRunResultLoader(),
         run_cache=FileRunCache(os.path.join(tmp, "data")),
         objective_cache=FileObjectiveCache(os.path.join(tmp, "data")),
         result_store=FileResultStore(os.path.join(tmp, "data")),
