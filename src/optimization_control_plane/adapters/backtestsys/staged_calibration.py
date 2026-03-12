@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import json
+from pathlib import Path
 
 from optimization_control_plane.adapters.backtestsys import (
     BackTestCoreParamsSearchSpaceAdapter,
@@ -24,6 +26,9 @@ from optimization_control_plane.adapters.backtestsys.staged_calibration_support 
 _DELAY_RANGE = {"low": 0, "high": 500000}
 _LAMBDA_RANGE = {"low": -0.5, "high": 0.5}
 _CANCEL_BIAS_RANGE = {"low": -1.0, "high": 1.0}
+_BASELINE_CACHE_VERSION = 1
+_BASELINE_CACHE_SPEC_ID = "__baseline_cache_key__"
+_BASELINE_CACHE_OUTPUT_ROOT = "__baseline_cache_output_root__"
 
 
 def run_staged_calibration(config: CalibrationConfig) -> dict[str, object]:
@@ -91,8 +96,14 @@ def _run_baseline_stage(
         "delay_in": defaults.delay_in,
         "delay_out": defaults.delay_out,
     }
+    cache_path = _build_baseline_cache_path(config.workspace_root, settings, fixed_params)
+    cached = _read_cached_baseline(cache_path)
+    if cached is not None:
+        return cached
     result = run_stage(runtime_root, "baseline", settings, FixedBacktestSearchSpaceAdapter(fixed_params))
-    return extract_baseline_raw(result.best_attrs)
+    baseline_raw = extract_baseline_raw(result.best_attrs)
+    _write_cached_baseline(cache_path, baseline_raw)
+    return baseline_raw
 
 
 def _run_machine_delay_stage(
@@ -197,3 +208,53 @@ def _run_final_verify_stage(
         "delay_out": defaults.delay_out,
     }
     return run_stage(runtime_root, "final_verify", settings, FixedBacktestSearchSpaceAdapter(fixed_params))
+
+
+def _build_baseline_cache_path(
+    workspace_root: Path,
+    settings: dict[str, object],
+    fixed_params: dict[str, object],
+) -> Path:
+    cache_root = workspace_root / "runtime" / "cache" / "iter_backtestsys"
+    cache_root.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "version": _BASELINE_CACHE_VERSION,
+        "settings": _normalize_baseline_settings_for_cache(settings),
+        "fixed_params": dict(fixed_params),
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    ).hexdigest()
+    return cache_root / f"baseline_{digest[:24]}.json"
+
+
+def _normalize_baseline_settings_for_cache(settings: dict[str, object]) -> dict[str, object]:
+    normalized = json.loads(json.dumps(settings))
+    normalized["spec_id"] = _BASELINE_CACHE_SPEC_ID
+    execution = normalized.get("execution_config")
+    if not isinstance(execution, dict):
+        raise ValueError("settings.execution_config must be a dict")
+    run_spec = execution.get("backtest_run_spec")
+    if not isinstance(run_spec, dict):
+        raise ValueError("settings.execution_config.backtest_run_spec must be a dict")
+    run_spec["output_root_dir"] = _BASELINE_CACHE_OUTPUT_ROOT
+    return normalized
+
+
+def _read_cached_baseline(cache_path: Path) -> dict[str, float] | None:
+    if not cache_path.exists():
+        return None
+    payload = json.loads(cache_path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError(f"baseline cache payload must be dict: {cache_path}")
+    baseline_raw = payload.get("baseline_raw")
+    if not isinstance(baseline_raw, dict):
+        raise ValueError(f"baseline cache payload missing baseline_raw dict: {cache_path}")
+    return extract_baseline_raw({"raw": baseline_raw})
+
+
+def _write_cached_baseline(cache_path: Path, baseline_raw: dict[str, float]) -> None:
+    payload = {"baseline_raw": dict(baseline_raw)}
+    temp_path = cache_path.with_suffix(cache_path.suffix + ".tmp")
+    temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    temp_path.replace(cache_path)
