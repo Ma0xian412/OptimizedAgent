@@ -12,6 +12,7 @@ from tests.conftest import make_spec
 def _make_spec_for_builder(
     tmp_path: str,
     dataset_inputs: dict[str, dict[str, str]] | None = None,
+    run_spec_overrides: dict[str, object] | None = None,
 ) -> object:
     backtest_root = f"{tmp_path}/BackTestSys"
     base_config_path = f"{backtest_root}/config.xml"
@@ -41,6 +42,14 @@ def _make_spec_for_builder(
             "cancel_file": "cancels/ds_a.csv",
         }
     }
+    run_spec_cfg: dict[str, object] = {
+        "backtestsys_root": backtest_root,
+        "base_config_path": base_config_path,
+        "output_root_dir": output_root_dir,
+        "dataset_inputs": resolved_inputs,
+    }
+    if run_spec_overrides is not None:
+        run_spec_cfg.update(run_spec_overrides)
     return make_spec(
         objective_config={
             "name": "loss",
@@ -59,12 +68,7 @@ def _make_spec_for_builder(
                 "gpu": 1,
                 "max_runtime_seconds": 120,
             },
-            "backtest_run_spec": {
-                "backtestsys_root": backtest_root,
-                "base_config_path": base_config_path,
-                "output_root_dir": output_root_dir,
-                "dataset_inputs": resolved_inputs,
-            },
+            "backtest_run_spec": run_spec_cfg,
         },
     )
 
@@ -165,6 +169,130 @@ class TestBackTestRunSpecBuilderAdapter:
         with pytest.raises(
             ValueError,
             match=r"backtest_run_spec\.dataset_inputs\[ds_a\]\.cancel_file must be a non-empty string",
+        ):
+            adapter.build(
+                params={
+                    "time_scale_lambda": 0.1,
+                    "cancel_bias_k": 0.1,
+                    "delay_in": 1,
+                    "delay_out": 1,
+                },
+                spec=spec,
+                dataset_id="ds_a",
+            )
+
+    def test_calibrated_map_mode_uses_dataset_machine_and_contract(self, tmp_path: object) -> None:
+        adapter = BackTestRunSpecBuilderAdapter()
+        spec = _make_spec_for_builder(
+            str(tmp_path),
+            dataset_inputs={
+                "ds_a": {
+                    "market_data_path": "data/ds_a.csv",
+                    "order_file": "orders/ds_a.csv",
+                    "cancel_file": "cancels/ds_a.csv",
+                    "machine": "m1",
+                    "contract": "c1",
+                }
+            },
+            run_spec_overrides={
+                "param_binding": {
+                    "mode": "calibrated_map",
+                    "machine_delay_map": {"m1": 77},
+                    "contract_core_map": {
+                        "c1": {
+                            "time_scale_lambda": -0.12,
+                            "cancel_bias_k": 0.34,
+                        }
+                    },
+                }
+            },
+        )
+        run_spec = adapter.build(
+            params={
+                "time_scale_lambda": 0.1,
+                "cancel_bias_k": 0.1,
+                "delay_in": 1,
+                "delay_out": 1,
+            },
+            spec=spec,
+            dataset_id="ds_a",
+        )
+        tree = ET.parse(run_spec.job.args[1])
+        root = tree.getroot()
+        assert root.find("tape/time_scale_lambda").text == "-0.12"  # type: ignore[union-attr]
+        assert root.find("exchange/cancel_bias_k").text == "0.34"  # type: ignore[union-attr]
+        assert root.find("runner/delay_in").text == "77"  # type: ignore[union-attr]
+        assert root.find("runner/delay_out").text == "77"  # type: ignore[union-attr]
+
+    def test_calibrated_map_requires_dataset_machine_label(self, tmp_path: object) -> None:
+        adapter = BackTestRunSpecBuilderAdapter()
+        spec = _make_spec_for_builder(
+            str(tmp_path),
+            dataset_inputs={
+                "ds_a": {
+                    "market_data_path": "data/ds_a.csv",
+                    "order_file": "orders/ds_a.csv",
+                    "cancel_file": "cancels/ds_a.csv",
+                    "contract": "c1",
+                }
+            },
+            run_spec_overrides={
+                "param_binding": {
+                    "mode": "calibrated_map",
+                    "machine_delay_map": {"m1": 77},
+                    "contract_core_map": {
+                        "c1": {
+                            "time_scale_lambda": -0.12,
+                            "cancel_bias_k": 0.34,
+                        }
+                    },
+                }
+            },
+        )
+        with pytest.raises(
+            ValueError,
+            match=r"backtest_run_spec\.dataset_inputs\[ds_a\]\.machine is required",
+        ):
+            adapter.build(
+                params={
+                    "time_scale_lambda": 0.1,
+                    "cancel_bias_k": 0.1,
+                    "delay_in": 1,
+                    "delay_out": 1,
+                },
+                spec=spec,
+                dataset_id="ds_a",
+            )
+
+    def test_calibrated_map_requires_machine_delay_entry(self, tmp_path: object) -> None:
+        adapter = BackTestRunSpecBuilderAdapter()
+        spec = _make_spec_for_builder(
+            str(tmp_path),
+            dataset_inputs={
+                "ds_a": {
+                    "market_data_path": "data/ds_a.csv",
+                    "order_file": "orders/ds_a.csv",
+                    "cancel_file": "cancels/ds_a.csv",
+                    "machine": "m2",
+                    "contract": "c1",
+                }
+            },
+            run_spec_overrides={
+                "param_binding": {
+                    "mode": "calibrated_map",
+                    "machine_delay_map": {"m1": 77},
+                    "contract_core_map": {
+                        "c1": {
+                            "time_scale_lambda": -0.12,
+                            "cancel_bias_k": 0.34,
+                        }
+                    },
+                }
+            },
+        )
+        with pytest.raises(
+            ValueError,
+            match=r"backtest_run_spec\.param_binding\.machine_delay_map\[m2\] is required",
         ):
             adapter.build(
                 params={
