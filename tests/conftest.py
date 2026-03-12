@@ -183,16 +183,13 @@ class StubObjectiveEvaluator:
 
 
 class StubGroundTruthProvider:
-    def load(self, spec: ExperimentSpec) -> GroundTruthData:
+    def load(self, spec: ExperimentSpec, dataset_id: str) -> GroundTruthData:
         groundtruth = spec.objective_config.get("groundtruth")
         if not isinstance(groundtruth, dict):
             raise ValueError("spec.objective_config.groundtruth must be a dict")
         payload = stable_json_serialize(groundtruth)
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
         return GroundTruthData(payload=groundtruth, fingerprint=f"sha256:{digest}")
-
-    def load_for_dataset(self, spec: ExperimentSpec, dataset_id: str) -> GroundTruthData:
-        return self.load(spec)
 
 
 class StubDatasetEnumerator:
