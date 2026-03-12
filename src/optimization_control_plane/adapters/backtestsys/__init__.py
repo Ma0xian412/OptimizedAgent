@@ -16,6 +16,9 @@ from optimization_control_plane.adapters.backtestsys.run_result_loader_adapter i
 from optimization_control_plane.adapters.backtestsys.groundtruth_provider_adapter import (
     BackTestGroundTruthProviderAdapter,
 )
+from optimization_control_plane.adapters.backtestsys.dataset_enumerator_adapter import (
+    BackTestDatasetEnumeratorAdapter,
+)
 
 __all__ = [
     "BackTestSearchSpaceAdapter",
@@ -24,4 +27,5 @@ __all__ = [
     "BackTestObjectiveKeyBuilderAdapter",
     "BackTestRunResultLoaderAdapter",
     "BackTestGroundTruthProviderAdapter",
+    "BackTestDatasetEnumeratorAdapter",
 ]

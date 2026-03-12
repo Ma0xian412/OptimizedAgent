@@ -408,3 +408,52 @@ orchestrator.start(spec=my_spec, settings=my_settings)
 - 完整 E2E 示例：`tests/e2e/test_random_sampler.py`、`tests/e2e/test_tpe_sampler.py`
 - 开发设计文档：`docs/development-guide.md`
 - Port 定义位置：`src/optimization_control_plane/ports/`
+
+---
+
+## 9. BackTestSys 适配器：单文件夹多日数据（思路 A）
+
+当数据集中在同一文件夹（如某合约 20250101–20250131 共 31 份 .pkl），采用 **预生成 dataset_paths** 方案。
+
+### 9.1 预生成 dataset_paths（由用户自行实现）
+
+在启动实验前，用户需自行扫描数据目录生成 `dataset_id -> path` 映射，并注入 `execution_config`。框架不提供预生成工具。
+
+### 9.2 注入 execution_config
+
+将生成的 `dataset_paths` 写入 `backtest_run_spec`：
+
+```python
+execution_config = {
+    "executor_kind": "backtest",
+    "default_resources": {"cpu": 2},
+    "backtest_run_spec": {
+        "backtestsys_root": "/path/to/BackTestSys",
+        "base_config_path": "/path/to/config.xml",
+        "output_root_dir": "/tmp/ocp_artifacts",
+        "dataset_paths": dataset_paths,  # 预生成结果
+    },
+}
+```
+
+### 9.3 使用 BackTestDatasetEnumeratorAdapter
+
+```python
+from optimization_control_plane.adapters.backtestsys import (
+    BackTestDatasetEnumeratorAdapter,
+    BackTestRunSpecBuilderAdapter,
+    # ... 其他适配器
+)
+
+obj_def = ObjectiveDefinition(
+    dataset_enumerator=BackTestDatasetEnumeratorAdapter(),
+    run_spec_builder=BackTestRunSpecBuilderAdapter(),
+    # ...
+)
+```
+
+### 9.4 控制每个 trial 的 dataset 子集
+
+- **全量**：不设 `meta.dataset_ids`，枚举器返回 `dataset_paths` 的全部 key（按字典序）。
+- **单日**：`meta={"dataset_ids": ["20250115"]}`。
+- **按周/自定义子集**：`meta={"dataset_ids": ["20250101", "20250102", ..., "20250107"]}`。
