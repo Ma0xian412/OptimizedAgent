@@ -413,15 +413,20 @@ orchestrator.start(spec=my_spec, settings=my_settings)
 
 ## 9. BackTestSys 适配器：单文件夹多日数据（思路 A）
 
-当数据集中在同一文件夹（如某合约 20250101–20250131 共 31 份 .pkl），采用 **预生成 dataset_paths** 方案。
+当数据集中在同一文件夹（如某合约 20250101–20250131 共 31 份 .pkl），采用 **预生成 dataset_inputs** 方案。
 
-### 9.1 预生成 dataset_paths（由用户自行实现）
+### 9.1 预生成 dataset_inputs（由用户自行实现）
 
-在启动实验前，用户需自行扫描数据目录生成 `dataset_id -> path` 映射，并注入 `execution_config`。框架不提供预生成工具。
+在启动实验前，用户需自行扫描数据目录生成 `dataset_id -> input` 映射，并注入 `execution_config`。  
+每个 `input` 需包含：
+
+- `market_data_path`
+- `order_file`
+- `cancel_file`
 
 ### 9.2 注入 execution_config
 
-将生成的 `dataset_paths` 写入 `backtest_run_spec`：
+将生成的 `dataset_inputs` 写入 `backtest_run_spec`：
 
 ```python
 execution_config = {
@@ -431,7 +436,7 @@ execution_config = {
         "backtestsys_root": "/path/to/BackTestSys",
         "base_config_path": "/path/to/config.xml",
         "output_root_dir": "/tmp/ocp_artifacts",
-        "dataset_paths": dataset_paths,  # 预生成结果
+        "dataset_inputs": dataset_inputs,  # 预生成结果
     },
 }
 ```
@@ -454,6 +459,6 @@ obj_def = ObjectiveDefinition(
 
 ### 9.4 控制每个 trial 的 dataset 子集
 
-- **全量**：不设 `meta.dataset_ids`，枚举器返回 `dataset_paths` 的全部 key（按字典序）。
+- **全量**：不设 `meta.dataset_ids`，枚举器返回 `dataset_inputs` 的全部 key（按字典序）。
 - **单日**：`meta={"dataset_ids": ["20250115"]}`。
 - **按周/自定义子集**：`meta={"dataset_ids": ["20250101", "20250102", ..., "20250107"]}`。

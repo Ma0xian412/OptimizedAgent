@@ -94,10 +94,10 @@ def _build_objective_definition() -> ObjectiveDefinition:
 def _build_settings(runtime_root: Path) -> dict[str, Any]:
     doneinfo_gt = MOCK_ROOT / "groundtruth" / "PubOrderDoneInfoLog_m1_20260312_TEST_CONTRACT.csv"
     executiondetail_gt = MOCK_ROOT / "groundtruth" / "PubExecutionDetailLog_m1_20260312_TEST_CONTRACT.csv"
-    dataset_paths = {
-        "ds_01": str(MOCK_ROOT / "market_data_ds_01.csv"),
-        "ds_02": str(MOCK_ROOT / "market_data_ds_02.csv"),
-        "ds_03": str(MOCK_ROOT / "market_data_ds_03.csv"),
+    dataset_inputs = {
+        "ds_01": _build_dataset_input("market_data_ds_01.csv"),
+        "ds_02": _build_dataset_input("market_data_ds_02.csv"),
+        "ds_03": _build_dataset_input("market_data_ds_03.csv"),
     }
     return {
         "spec_id": "iter_backtestsys_delay_equal_demo",
@@ -129,7 +129,7 @@ def _build_settings(runtime_root: Path) -> dict[str, Any]:
                 "backtestsys_root": str(BACKTESTSYS_ROOT),
                 "base_config_path": str(BASE_CONFIG_PATH),
                 "output_root_dir": str(runtime_root / "artifacts"),
-                "dataset_paths": dataset_paths,
+                "dataset_inputs": dataset_inputs,
                 "python_executable": sys.executable,
             },
         },
@@ -137,6 +137,14 @@ def _build_settings(runtime_root: Path) -> dict[str, Any]:
         "pruner": {"type": "nop"},
         "parallelism": {"max_in_flight_trials": 1},
         "stop": {"max_trials": MAX_TRIALS, "max_failures": MAX_FAILURES},
+    }
+
+
+def _build_dataset_input(market_data_filename: str) -> dict[str, str]:
+    return {
+        "market_data_path": str(MOCK_ROOT / market_data_filename),
+        "order_file": str(MOCK_ROOT / "replay_orders.csv"),
+        "cancel_file": str(MOCK_ROOT / "replay_cancels.csv"),
     }
 
 
@@ -162,6 +170,7 @@ def main() -> None:
     _must_exist(MOCK_ROOT / "market_data_ds_02.csv")
     _must_exist(MOCK_ROOT / "market_data_ds_03.csv")
     _must_exist(MOCK_ROOT / "replay_orders.csv")
+    _must_exist(MOCK_ROOT / "replay_cancels.csv")
     _must_exist(MOCK_ROOT / "contracts.xml")
 
     runtime_root = WORKSPACE_ROOT / "runtime" / "iter_backtestsys"

@@ -95,7 +95,7 @@ python3 -m pip install optuna structlog pytest
   - `backtestsys_root`
   - `base_config_path`
   - `output_root_dir`
-  - `dataset_paths`（`dataset_id -> 数据文件路径`）
+  - `dataset_inputs`（`dataset_id -> {market_data_path, order_file, cancel_file}`）
   - `python_executable`（建议显式传 `sys.executable`）
 
 ---
@@ -195,8 +195,11 @@ BackTestSys 回测结果表（每次执行）：
 
 切换时重点修改 3 类内容：
 
-1. `dataset_paths`
-   - 指向真实市场数据
+1. `dataset_inputs`
+   - 每个 `dataset_id` 同时配置：
+     - `market_data_path`
+     - `order_file`
+     - `cancel_file`
 2. `groundtruth`
    - 指向真实 GT 的 DoneInfo/ExecutionDetail
 3. 基础 `config.xml`

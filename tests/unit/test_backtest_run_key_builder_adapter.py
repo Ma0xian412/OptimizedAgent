@@ -21,6 +21,12 @@ def _write_base_config(base_config_path: str) -> None:
   <tape><time_scale_lambda>0.0</time_scale_lambda></tape>
   <exchange><cancel_bias_k>0.0</cancel_bias_k></exchange>
   <runner><delay_in>0</delay_in><delay_out>0</delay_out></runner>
+  <strategy>
+    <params>
+      <order_file>orders/default.csv</order_file>
+      <cancel_file>cancels/default.csv</cancel_file>
+    </params>
+  </strategy>
 </config>
 """,
         encoding="utf-8",
@@ -48,9 +54,17 @@ def _make_spec(tmp_root: str) -> object:
                 "backtestsys_root": backtest_root,
                 "base_config_path": base_config_path,
                 "output_root_dir": f"{tmp_root}/artifacts",
-                "dataset_paths": {
-                    "ds_a": "data/ds_a.csv",
-                    "ds_b": "data/ds_b.csv",
+                "dataset_inputs": {
+                    "ds_a": {
+                        "market_data_path": "data/ds_a.csv",
+                        "order_file": "orders/ds_a.csv",
+                        "cancel_file": "cancels/ds_a.csv",
+                    },
+                    "ds_b": {
+                        "market_data_path": "data/ds_b.csv",
+                        "order_file": "orders/ds_b.csv",
+                        "cancel_file": "cancels/ds_b.csv",
+                    },
                 },
             },
         },

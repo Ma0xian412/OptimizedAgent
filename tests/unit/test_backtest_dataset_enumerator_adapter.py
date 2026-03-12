@@ -8,8 +8,8 @@ from optimization_control_plane.adapters.backtestsys import BackTestDatasetEnume
 from tests.conftest import make_spec
 
 
-def _make_spec_with_dataset_paths(
-    dataset_paths: dict[str, str],
+def _make_spec_with_dataset_inputs(
+    dataset_inputs: dict[str, dict[str, str]],
     meta: dict | None = None,
 ) -> object:
     return make_spec(
@@ -21,7 +21,7 @@ def _make_spec_with_dataset_paths(
                 "backtestsys_root": "/tmp/BackTestSys",
                 "base_config_path": "/tmp/config.xml",
                 "output_root_dir": "/tmp/ocp_artifacts",
-                "dataset_paths": dataset_paths,
+                "dataset_inputs": dataset_inputs,
             },
         },
     )
@@ -30,27 +30,61 @@ def _make_spec_with_dataset_paths(
 class TestBackTestDatasetEnumeratorAdapter:
     def test_single_dataset_returns_one_id(self) -> None:
         adapter = BackTestDatasetEnumeratorAdapter()
-        spec = _make_spec_with_dataset_paths({"20250101": "/data/20250101.pkl"})
+        spec = _make_spec_with_dataset_inputs(
+            {
+                "20250101": {
+                    "market_data_path": "/data/20250101.pkl",
+                    "order_file": "/orders/20250101.csv",
+                    "cancel_file": "/cancels/20250101.csv",
+                }
+            }
+        )
         result = adapter.enumerate(spec)
         assert result == ("20250101",)
 
     def test_multiple_datasets_returns_sorted_ids(self) -> None:
         adapter = BackTestDatasetEnumeratorAdapter()
-        spec = _make_spec_with_dataset_paths({
-            "20250131": "/data/20250131.pkl",
-            "20250101": "/data/20250101.pkl",
-            "20250115": "/data/20250115.pkl",
-        })
+        spec = _make_spec_with_dataset_inputs(
+            {
+                "20250131": {
+                    "market_data_path": "/data/20250131.pkl",
+                    "order_file": "/orders/20250131.csv",
+                    "cancel_file": "/cancels/20250131.csv",
+                },
+                "20250101": {
+                    "market_data_path": "/data/20250101.pkl",
+                    "order_file": "/orders/20250101.csv",
+                    "cancel_file": "/cancels/20250101.csv",
+                },
+                "20250115": {
+                    "market_data_path": "/data/20250115.pkl",
+                    "order_file": "/orders/20250115.csv",
+                    "cancel_file": "/cancels/20250115.csv",
+                },
+            }
+        )
         result = adapter.enumerate(spec)
         assert result == ("20250101", "20250115", "20250131")
 
     def test_meta_dataset_ids_restricts_subset(self) -> None:
         adapter = BackTestDatasetEnumeratorAdapter()
-        spec = _make_spec_with_dataset_paths(
-            dataset_paths={
-                "20250101": "/data/20250101.pkl",
-                "20250102": "/data/20250102.pkl",
-                "20250103": "/data/20250103.pkl",
+        spec = _make_spec_with_dataset_inputs(
+            dataset_inputs={
+                "20250101": {
+                    "market_data_path": "/data/20250101.pkl",
+                    "order_file": "/orders/20250101.csv",
+                    "cancel_file": "/cancels/20250101.csv",
+                },
+                "20250102": {
+                    "market_data_path": "/data/20250102.pkl",
+                    "order_file": "/orders/20250102.csv",
+                    "cancel_file": "/cancels/20250102.csv",
+                },
+                "20250103": {
+                    "market_data_path": "/data/20250103.pkl",
+                    "order_file": "/orders/20250103.csv",
+                    "cancel_file": "/cancels/20250103.csv",
+                },
             },
             meta={"dataset_ids": ["20250102"]},
         )
@@ -59,11 +93,23 @@ class TestBackTestDatasetEnumeratorAdapter:
 
     def test_meta_dataset_ids_multiple(self) -> None:
         adapter = BackTestDatasetEnumeratorAdapter()
-        spec = _make_spec_with_dataset_paths(
-            dataset_paths={
-                "20250101": "/data/20250101.pkl",
-                "20250102": "/data/20250102.pkl",
-                "20250103": "/data/20250103.pkl",
+        spec = _make_spec_with_dataset_inputs(
+            dataset_inputs={
+                "20250101": {
+                    "market_data_path": "/data/20250101.pkl",
+                    "order_file": "/orders/20250101.csv",
+                    "cancel_file": "/cancels/20250101.csv",
+                },
+                "20250102": {
+                    "market_data_path": "/data/20250102.pkl",
+                    "order_file": "/orders/20250102.csv",
+                    "cancel_file": "/cancels/20250102.csv",
+                },
+                "20250103": {
+                    "market_data_path": "/data/20250103.pkl",
+                    "order_file": "/orders/20250103.csv",
+                    "cancel_file": "/cancels/20250103.csv",
+                },
             },
             meta={"dataset_ids": ["20250103", "20250101"]},
         )
@@ -84,23 +130,45 @@ class TestBackTestDatasetEnumeratorAdapter:
         ):
             adapter.enumerate(spec)
 
-    def test_empty_dataset_paths_raises(self) -> None:
+    def test_empty_dataset_inputs_raises(self) -> None:
         adapter = BackTestDatasetEnumeratorAdapter()
-        spec = _make_spec_with_dataset_paths({})
+        spec = _make_spec_with_dataset_inputs({})
         with pytest.raises(
             ValueError,
-            match="dataset_paths.*must be a non-empty dict",
+            match="dataset_inputs.*must be a non-empty dict",
         ):
             adapter.enumerate(spec)
 
     def test_meta_dataset_ids_not_in_paths_raises(self) -> None:
         adapter = BackTestDatasetEnumeratorAdapter()
-        spec = _make_spec_with_dataset_paths(
-            dataset_paths={"20250101": "/data/20250101.pkl"},
+        spec = _make_spec_with_dataset_inputs(
+            dataset_inputs={
+                "20250101": {
+                    "market_data_path": "/data/20250101.pkl",
+                    "order_file": "/orders/20250101.csv",
+                    "cancel_file": "/cancels/20250101.csv",
+                }
+            },
             meta={"dataset_ids": ["20250199"]},
         )
         with pytest.raises(
             ValueError,
             match="meta.dataset_ids.*not found",
+        ):
+            adapter.enumerate(spec)
+
+    def test_missing_required_input_field_raises(self) -> None:
+        adapter = BackTestDatasetEnumeratorAdapter()
+        spec = _make_spec_with_dataset_inputs(
+            dataset_inputs={
+                "20250101": {
+                    "market_data_path": "/data/20250101.pkl",
+                    "order_file": "/orders/20250101.csv",
+                }
+            }
+        )
+        with pytest.raises(
+            ValueError,
+            match=r"dataset_inputs\['20250101'\]\.cancel_file must be a non-empty string",
         ):
             adapter.enumerate(spec)

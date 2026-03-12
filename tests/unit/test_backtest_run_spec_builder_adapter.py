@@ -9,7 +9,10 @@ from optimization_control_plane.adapters.backtestsys import BackTestRunSpecBuild
 from tests.conftest import make_spec
 
 
-def _make_spec_for_builder(tmp_path: str) -> object:
+def _make_spec_for_builder(
+    tmp_path: str,
+    dataset_inputs: dict[str, dict[str, str]] | None = None,
+) -> object:
     backtest_root = f"{tmp_path}/BackTestSys"
     base_config_path = f"{backtest_root}/config.xml"
     output_root_dir = f"{tmp_path}/ocp_artifacts"
@@ -21,10 +24,23 @@ def _make_spec_for_builder(tmp_path: str) -> object:
   <tape><time_scale_lambda>0.0</time_scale_lambda></tape>
   <exchange><cancel_bias_k>0.0</cancel_bias_k></exchange>
   <runner><delay_in>0</delay_in><delay_out>0</delay_out></runner>
+  <strategy>
+    <params>
+      <order_file>orders/default.csv</order_file>
+      <cancel_file>cancels/default.csv</cancel_file>
+    </params>
+  </strategy>
 </config>
 """,
         encoding="utf-8",
     )
+    resolved_inputs = dataset_inputs or {
+        "ds_a": {
+            "market_data_path": "data/ds_a.csv",
+            "order_file": "orders/ds_a.csv",
+            "cancel_file": "cancels/ds_a.csv",
+        }
+    }
     return make_spec(
         objective_config={
             "name": "loss",
@@ -47,7 +63,7 @@ def _make_spec_for_builder(tmp_path: str) -> object:
                 "backtestsys_root": backtest_root,
                 "base_config_path": base_config_path,
                 "output_root_dir": output_root_dir,
-                "dataset_paths": {"ds_a": "data/ds_a.csv"},
+                "dataset_inputs": resolved_inputs,
             },
         },
     )
@@ -92,6 +108,10 @@ class TestBackTestRunSpecBuilderAdapter:
         assert root.find("runner/delay_out").text == "200"  # type: ignore[union-attr]
         assert root.find("data/path") is not None
         assert root.find("data/path").text == "data/ds_a.csv"  # type: ignore[union-attr]
+        assert root.find("strategy/params/order_file") is not None
+        assert root.find("strategy/params/order_file").text == "orders/ds_a.csv"  # type: ignore[union-attr]
+        assert root.find("strategy/params/cancel_file") is not None
+        assert root.find("strategy/params/cancel_file").text == "cancels/ds_a.csv"  # type: ignore[union-attr]
 
     def test_missing_backtest_run_spec_raises(self, tmp_path: object) -> None:
         adapter = BackTestRunSpecBuilderAdapter()
@@ -125,6 +145,32 @@ class TestBackTestRunSpecBuilderAdapter:
                     "time_scale_lambda": 0.1,
                     "cancel_bias_k": 0.1,
                     "delay_in": 1.0,
+                    "delay_out": 1,
+                },
+                spec=spec,
+                dataset_id="ds_a",
+            )
+
+    def test_missing_dataset_input_field_raises(self, tmp_path: object) -> None:
+        adapter = BackTestRunSpecBuilderAdapter()
+        spec = _make_spec_for_builder(
+            str(tmp_path),
+            dataset_inputs={
+                "ds_a": {
+                    "market_data_path": "data/ds_a.csv",
+                    "order_file": "orders/ds_a.csv",
+                }
+            },
+        )
+        with pytest.raises(
+            ValueError,
+            match=r"backtest_run_spec\.dataset_inputs\[ds_a\]\.cancel_file must be a non-empty string",
+        ):
+            adapter.build(
+                params={
+                    "time_scale_lambda": 0.1,
+                    "cancel_bias_k": 0.1,
+                    "delay_in": 1,
                     "delay_out": 1,
                 },
                 spec=spec,
