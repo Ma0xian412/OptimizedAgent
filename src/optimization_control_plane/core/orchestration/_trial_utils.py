@@ -48,7 +48,7 @@ def with_shared_run_attrs(result: ObjectiveResult, leader_trial_ids: set[str]) -
     attrs = dict(result.attrs)
     attrs["shared_run"] = True
     attrs["shared_run_leader_trial_ids"] = sorted(leader_trial_ids)
-    return ObjectiveResult(value=result.value, attrs=attrs, artifact_refs=result.artifact_refs)
+    return ObjectiveResult(attrs=attrs, artifact_refs=result.artifact_refs)
 
 
 def build_trial_objective_key(

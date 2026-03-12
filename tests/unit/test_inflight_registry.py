@@ -120,13 +120,13 @@ class TestInflightRegistry:
             trial_id="t1",
             run_key="rk:t1:d1",
             dataset_id="d1",
-            objective_result=ObjectiveResult(value=0.1, attrs={}, artifact_refs=[]),
+            objective_result=ObjectiveResult(attrs={"value": 0.1}, artifact_refs=[]),
         )
         complete, all_results = reg.record_run_complete(
             trial_id="t1",
             run_key="rk:t1:d2",
             dataset_id="d2",
-            objective_result=ObjectiveResult(value=0.2, attrs={}, artifact_refs=[]),
+            objective_result=ObjectiveResult(attrs={"value": 0.2}, artifact_refs=[]),
         )
         assert complete is True
         assert all_results is not None
@@ -139,7 +139,7 @@ class TestInflightRegistry:
             trial_id="t1",
             run_key="rk:t1:d1",
             dataset_id="d1",
-            objective_result=ObjectiveResult(value=0.1, attrs={}, artifact_refs=[]),
+            objective_result=ObjectiveResult(attrs={"value": 0.1}, artifact_refs=[]),
         )
         complete, _ = reg.record_run_failure(
             trial_id="t1",
