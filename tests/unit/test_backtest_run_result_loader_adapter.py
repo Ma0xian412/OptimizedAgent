@@ -18,7 +18,7 @@ def _write_csv(path: Path, headers: list[str], rows: list[list[object]]) -> None
 
 
 class TestBackTestRunResultLoaderAdapter:
-    def test_load_directory_layout_with_optional_artifacts(self, tmp_path: Path) -> None:
+    def test_load_directory_layout_reads_only_four_tables(self, tmp_path: Path) -> None:
         result_root = tmp_path / "result_root"
         run_dir = result_root / "run_result_20260311_000000_000001"
         _write_csv(
@@ -62,12 +62,12 @@ class TestBackTestRunResultLoaderAdapter:
         assert result.metrics["fill_rate_by_order"] == pytest.approx(0.5)
         assert result.metrics["avg_fill_price"] == pytest.approx(100.3333333)
         assert result.metrics["avg_execution_latency_tick"] == pytest.approx(12.5)
-        assert result.metrics["receipt_count"] == 2
         assert result.diagnostics["result_layout"] == "directory"
-        assert result.diagnostics["contract_info"]["contract_id"] == "IF2401"
-        assert result.diagnostics["receipt_type_counts"] == {"FILL": 1, "PARTIAL": 1}
-        assert result.diagnostics["log_line_count"] == 2
-        assert len(result.artifact_refs) == 7
+        assert "contract_info" not in result.diagnostics
+        assert "receipt_type_counts" not in result.diagnostics
+        assert "log_line_count" not in result.diagnostics
+        assert len(result.artifact_refs) == 4
+        assert all(path.endswith(".csv") for path in result.artifact_refs)
 
     def test_load_prefix_layout(self, tmp_path: Path) -> None:
         prefix = tmp_path / "prefix" / "result"
