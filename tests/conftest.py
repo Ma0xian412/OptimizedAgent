@@ -176,8 +176,11 @@ class StubObjectiveEvaluator:
             raise TypeError("run_result.payload.artifact_refs must be a list for StubObjectiveEvaluator")
         value = metrics.get(self._metric, 0.0)
         return ObjectiveResult(
-            value=float(value),
-            attrs={"metric": self._metric, "groundtruth_fingerprint": groundtruth.fingerprint},
+            attrs={
+                "value": float(value),
+                "metric": self._metric,
+                "groundtruth_fingerprint": groundtruth.fingerprint,
+            },
             artifact_refs=list(artifact_refs),
         )
 
@@ -217,8 +220,8 @@ class StubTrialResultAggregator:
         if len(results) == 1:
             return results[0][1]
         total = sum(result.value for _, result in results)
-        attrs = {"aggregated_dataset_count": len(results)}
-        return ObjectiveResult(value=total / len(results), attrs=attrs, artifact_refs=[])
+        attrs = {"value": total / len(results), "aggregated_dataset_count": len(results)}
+        return ObjectiveResult(attrs=attrs, artifact_refs=[])
 
 
 class StubRunResultLoader:

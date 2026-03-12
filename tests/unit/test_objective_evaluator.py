@@ -12,7 +12,7 @@ class AlternativeEvaluator:
         spec: object,
         groundtruth: GroundTruthData,
     ) -> ObjectiveResult:
-        return ObjectiveResult(value=-999.0, attrs={"custom": True}, artifact_refs=[])
+        return ObjectiveResult(attrs={"value": -999.0, "custom": True}, artifact_refs=[])
 
 
 class TestObjectiveEvaluator:

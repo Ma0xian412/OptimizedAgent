@@ -34,7 +34,6 @@ class FileResultStore:
         path = self._base / _TRIAL_RESULTS_DIR / _safe_filename(trial_id)
         _atomic_write_json(path, {
             "trial_id": trial_id,
-            "value": objective_result.value,
             "attrs": objective_result.attrs,
             "artifact_refs": objective_result.artifact_refs,
         })
