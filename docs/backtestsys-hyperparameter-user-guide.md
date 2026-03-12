@@ -95,7 +95,7 @@ python3 -m pip install optuna structlog pytest
   - `backtestsys_root`
   - `base_config_path`
   - `output_root_dir`
-  - `dataset_paths`（`dataset_id -> 数据文件路径`）
+  - `dataset_inputs`（`dataset_id -> {market_data_path, order_file, cancel_file}`）
   - `python_executable`（建议显式传 `sys.executable`）
 
 ---
@@ -104,16 +104,25 @@ python3 -m pip install optuna structlog pytest
 
 你有两种方式：
 
-### 方式 A：直接使用现有 `BackTestSearchSpaceAdapter`
+### 方式 A：直接使用内置二选一适配器
 
-适用于直接调这 4 个参数：
+适配器 1：`BackTestDelaySearchSpaceAdapter`
 
-- `time_scale_lambda`
-- `cancel_bias_k`
-- `delay_in`
-- `delay_out`
+- 仅采样 `delay`（一个参数）
+- 输出时自动映射为 `delay_in = delay_out = delay`
+- 需在 `objective_config.backtest_fixed_params` 固定：
+  - `time_scale_lambda`
+  - `cancel_bias_k`
 
-只需在 `objective_config.backtest_search_space` 给出 low/high。
+适配器 2：`BackTestCoreParamsSearchSpaceAdapter`
+
+- 仅采样：
+  - `time_scale_lambda`
+  - `cancel_bias_k`
+- 需在 `objective_config.backtest_fixed_params` 固定：
+  - `delay`（输出映射为 `delay_in = delay_out = delay`）
+
+每次实验只注入一个适配器到 `ObjectiveDefinition(search_space=...)`。
 
 ### 方式 B：自定义 SearchSpace（推荐）
 
@@ -186,8 +195,11 @@ BackTestSys 回测结果表（每次执行）：
 
 切换时重点修改 3 类内容：
 
-1. `dataset_paths`
-   - 指向真实市场数据
+1. `dataset_inputs`
+   - 每个 `dataset_id` 同时配置：
+     - `market_data_path`
+     - `order_file`
+     - `cancel_file`
 2. `groundtruth`
    - 指向真实 GT 的 DoneInfo/ExecutionDetail
 3. 基础 `config.xml`
