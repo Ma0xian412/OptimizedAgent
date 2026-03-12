@@ -12,14 +12,15 @@ BASE_CONFIG_PATH = WORKSPACE_ROOT / "config.xml"
 MOCK_ROOT = WORKSPACE_ROOT / "mock_backtestsys"
 MAX_TRIALS = 10
 MAX_FAILURES = 2
-FIXED_TIME_SCALE_LAMBDA = 0.0
-FIXED_CANCEL_BIAS_K = 0.0
+SEARCH_SPACE_MODE = "delay"  # allowed values: delay, core_params
 
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from optimization_control_plane.adapters.backtestsys import (  # noqa: E402
+    BackTestCoreParamsSearchSpaceAdapter,
     BackTestDatasetEnumeratorAdapter,
+    BackTestDelaySearchSpaceAdapter,
     BackTestGroundTruthProviderAdapter,
     BackTestObjectiveEvaluatorAdapter,
     BackTestObjectiveKeyBuilderAdapter,
@@ -40,8 +41,6 @@ from optimization_control_plane.adapters.storage import (  # noqa: E402
     FileRunCache,
 )
 from optimization_control_plane.core import ObjectiveDefinition, TrialOrchestrator  # noqa: E402
-from optimization_control_plane.domain.models import ExperimentSpec  # noqa: E402
-from optimization_control_plane.ports.optimizer_backend import TrialContext  # noqa: E402
 
 
 def _must_exist(path: Path) -> None:
@@ -49,41 +48,39 @@ def _must_exist(path: Path) -> None:
         raise FileNotFoundError(f"required path not found: {path}")
 
 
-def _read_delay_range(spec: ExperimentSpec) -> tuple[int, int]:
-    space = spec.objective_config.get("backtest_search_space")
-    if not isinstance(space, dict):
-        raise ValueError("objective_config.backtest_search_space must be a dict")
-    delay_cfg = space.get("delay")
-    if not isinstance(delay_cfg, dict):
-        raise ValueError("objective_config.backtest_search_space.delay must be a dict")
-    low = delay_cfg.get("low")
-    high = delay_cfg.get("high")
-    if not isinstance(low, int) or not isinstance(high, int):
-        raise ValueError("objective_config.backtest_search_space.delay low/high must be int")
-    if low > high:
-        raise ValueError("objective_config.backtest_search_space.delay low must be <= high")
-    return low, high
+def _build_search_space_adapter() -> object:
+    if SEARCH_SPACE_MODE == "delay":
+        return BackTestDelaySearchSpaceAdapter()
+    if SEARCH_SPACE_MODE == "core_params":
+        return BackTestCoreParamsSearchSpaceAdapter()
+    raise ValueError(f"unsupported SEARCH_SPACE_MODE: {SEARCH_SPACE_MODE}")
 
 
-class DelayEqualitySearchSpaceAdapter:
-    """Sample one delay and enforce delay_in == delay_out."""
-
-    def sample(self, ctx: TrialContext, spec: ExperimentSpec) -> dict[str, object]:
-        low, high = _read_delay_range(spec)
-        sampled_delay = ctx.suggest_int("delay", low, high)
-        sampled = {
-            "time_scale_lambda": FIXED_TIME_SCALE_LAMBDA,
-            "cancel_bias_k": FIXED_CANCEL_BIAS_K,
-            "delay_in": sampled_delay,
-            "delay_out": sampled_delay,
+def _build_backtest_search_space() -> dict[str, object]:
+    if SEARCH_SPACE_MODE == "delay":
+        return {"delay": {"low": 0, "high": 500000}}
+    if SEARCH_SPACE_MODE == "core_params":
+        return {
+            "time_scale_lambda": {"low": -0.5, "high": 0.5},
+            "cancel_bias_k": {"low": -1.0, "high": 1.0},
         }
-        ctx.set_user_attr("backtest_config_patch", sampled)
-        return sampled
+    raise ValueError(f"unsupported SEARCH_SPACE_MODE: {SEARCH_SPACE_MODE}")
+
+
+def _build_backtest_fixed_params() -> dict[str, object]:
+    if SEARCH_SPACE_MODE == "delay":
+        return {
+            "time_scale_lambda": 0.0,
+            "cancel_bias_k": 0.0,
+        }
+    if SEARCH_SPACE_MODE == "core_params":
+        return {"delay": 0}
+    raise ValueError(f"unsupported SEARCH_SPACE_MODE: {SEARCH_SPACE_MODE}")
 
 
 def _build_objective_definition() -> ObjectiveDefinition:
     return ObjectiveDefinition(
-        search_space=DelayEqualitySearchSpaceAdapter(),
+        search_space=_build_search_space_adapter(),
         dataset_enumerator=BackTestDatasetEnumeratorAdapter(),
         run_spec_builder=BackTestRunSpecBuilderAdapter(),
         run_key_builder=BackTestRunKeyBuilderAdapter(),
@@ -122,9 +119,8 @@ def _build_settings(runtime_root: Path) -> dict[str, Any]:
                 "doneinfo_path": str(doneinfo_gt),
                 "executiondetail_path": str(executiondetail_gt),
             },
-            "backtest_search_space": {
-                "delay": {"low": 0, "high": 500000},
-            },
+            "backtest_search_space": _build_backtest_search_space(),
+            "backtest_fixed_params": _build_backtest_fixed_params(),
         },
         "execution_config": {
             "executor_kind": "backtest",
