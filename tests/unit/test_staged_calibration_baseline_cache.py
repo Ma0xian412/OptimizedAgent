@@ -1,0 +1,78 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from optimization_control_plane.adapters.backtestsys import staged_calibration
+from optimization_control_plane.adapters.backtestsys.staged_calibration_support import (
+    BacktestDefaults,
+    CalibrationConfig,
+    DatasetDefinition,
+    StageResult,
+)
+
+
+def _build_config(workspace_root: Path) -> CalibrationConfig:
+    return CalibrationConfig(
+        workspace_root=workspace_root,
+        backtestsys_root=workspace_root / "BackTestSys",
+        base_config_path=workspace_root / "config.xml",
+        mock_root=workspace_root / "mock_backtestsys",
+        datasets=(DatasetDefinition("ds_01", "market_data_ds_01.csv", "m1", "c1"),),
+        max_failures=2,
+        baseline_trials=1,
+        machine_delay_trials=12,
+        contract_core_trials=12,
+        verify_trials=1,
+        default_resources={"cpu": 1, "max_runtime_seconds": 60},
+    )
+
+
+def test_baseline_stage_uses_cross_run_cache(monkeypatch: object, tmp_path: Path) -> None:
+    call_count = {"value": 0}
+
+    def fake_run_stage(
+        runtime_root: Path,
+        stage_name: str,
+        settings: dict[str, object],
+        search_space: object,
+    ) -> StageResult:
+        del runtime_root, settings, search_space
+        call_count["value"] += 1
+        if stage_name != "baseline":
+            raise AssertionError("unexpected stage name")
+        return StageResult(
+            best_value=1.0,
+            best_params={},
+            best_attrs={"raw": {"curve": 2.0, "terminal": 3.0, "cancel": 4.0, "post": 5.0}},
+        )
+
+    monkeypatch.setattr(staged_calibration, "run_stage", fake_run_stage)
+    config = _build_config(tmp_path)
+    dataset_inputs = {
+        "ds_01": {
+            "market_data_path": str(tmp_path / "mock_backtestsys" / "market_data_ds_01.csv"),
+            "order_file": str(tmp_path / "mock_backtestsys" / "replay_orders.csv"),
+            "cancel_file": str(tmp_path / "mock_backtestsys" / "replay_cancels.csv"),
+            "machine": "m1",
+            "contract": "c1",
+        }
+    }
+    defaults = BacktestDefaults(time_scale_lambda=0.1, cancel_bias_k=0.2, delay_in=10, delay_out=10)
+
+    first = staged_calibration._run_baseline_stage(
+        config=config,
+        runtime_root=tmp_path / "runtime" / "run_1",
+        run_tag="run_1",
+        dataset_inputs=dataset_inputs,
+        defaults=defaults,
+    )
+    second = staged_calibration._run_baseline_stage(
+        config=config,
+        runtime_root=tmp_path / "runtime" / "run_2",
+        run_tag="run_2",
+        dataset_inputs=dataset_inputs,
+        defaults=defaults,
+    )
+
+    assert first == second
+    assert call_count["value"] == 1
