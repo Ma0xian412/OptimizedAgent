@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config>
+    <data>
+        <path>/workspace/mock_backtestsys/market_data.csv</path>
+        <format>csv</format>
+    </data>
+
+    <tape>
+        <epsilon>1.0</epsilon>
+        <time_scale_lambda>0.0</time_scale_lambda>
+        <top_k>5</top_k>
+        <tick_size>1.0</tick_size>
+    </tape>
+
+    <exchange>
+        <cancel_bias_k>0.0</cancel_bias_k>
+    </exchange>
+
+    <runner>
+        <delay_out>0</delay_out>
+        <delay_in>0</delay_in>
+        <show_progress>false</show_progress>
+    </runner>
+
+    <portfolio>
+        <initial_cash>100000.0</initial_cash>
+    </portfolio>
+
+    <strategy>
+        <name>ReplayStrategy_Impl</name>
+        <params>
+            <order_file>/workspace/mock_backtestsys/replay_orders.csv</order_file>
+            <cancel_file>/workspace/mock_backtestsys/replay_cancels.csv</cancel_file>
+        </params>
+    </strategy>
+
+    <receipt_logger>
+        <verbose>false</verbose>
+        <output_file></output_file>
+    </receipt_logger>
+
+    <run_result>
+        <output_file></output_file>
+    </run_result>
+
+    <observability_stream>
+        <history_dir>.obs_history</history_dir>
+        <subscriber_max_memory_mb>8</subscriber_max_memory_mb>
+    </observability_stream>
+
+    <logging>
+        <debug>false</debug>
+        <log_file></log_file>
+        <level>INFO</level>
+        <console>false</console>
+    </logging>
+
+    <snapshot>
+        <min_interval_tick>5000000</min_interval_tick>
+        <tolerance_tick>100000</tolerance_tick>
+    </snapshot>
+
+    <contract>
+        <contract_id>TEST_CONTRACT</contract_id>
+        <contract_dictionary_path>/workspace/mock_backtestsys/contracts.xml</contract_dictionary_path>
+    </contract>
+</config>
