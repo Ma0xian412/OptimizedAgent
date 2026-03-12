@@ -4,13 +4,13 @@ from __future__ import annotations
 import os
 
 from optimization_control_plane.adapters.execution import MultiprocessExecutionBackend
-from optimization_control_plane.adapters.storage import FileRunResultLoader
 from optimization_control_plane.domain.enums import EventKind, JobStatus
 from optimization_control_plane.domain.models import (
     ExecutionRequest,
     Job,
     RunSpec,
 )
+from tests.conftest import StubRunResultLoader
 
 
 def _request(run_spec: RunSpec, request_id: str = "req_1") -> ExecutionRequest:
@@ -50,7 +50,7 @@ class TestMultiprocessBackend:
         event = backend.wait_any([handle], timeout=5.0)
         assert event is not None
         assert event.kind == EventKind.COMPLETED
-        loaded = FileRunResultLoader().load(spec)
+        loaded = StubRunResultLoader().load(spec)
         assert loaded.payload == {"metrics": {"loss": 0.1}}
 
     def test_wait_any_failed_exit_nonzero(self, tmp_path: object) -> None:

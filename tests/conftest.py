@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from pathlib import Path
 from typing import Any
 
 from optimization_control_plane.domain.models import (
@@ -220,3 +222,14 @@ class StubTrialResultAggregator:
         total = sum(result.value for _, result in results)
         attrs = {"aggregated_dataset_count": len(results)}
         return ObjectiveResult(value=total / len(results), attrs=attrs, artifact_refs=[])
+
+
+class StubRunResultLoader:
+    def load(self, run_spec: RunSpec) -> RunResult:
+        path = Path(run_spec.result_path)
+        if not path.exists():
+            raise FileNotFoundError(f"run result file not found: {path}")
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise TypeError("run result file must contain a JSON object")
+        return RunResult(payload=data["payload"])

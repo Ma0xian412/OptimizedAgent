@@ -7,6 +7,6 @@ from optimization_control_plane.domain.models import RunResult, RunSpec
 
 @runtime_checkable
 class RunResultLoader(Protocol):
-    """Load run result from the path declared in RunSpec."""
+    """Load a raw run-result payload from the path declared in RunSpec."""
 
     def load(self, run_spec: RunSpec) -> RunResult: ...

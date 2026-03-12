@@ -129,6 +129,8 @@ def evaluate(
 
 **说明**：
 
+- `RunResult` 仅作为原始结果承载对象，核心字段是 `payload`
+- `ObjectiveEvaluator` 负责从 `run_result.payload` 中自行解析出业务指标（如 `metrics`、`artifact_refs`）
 - `ObjectiveResult` 包含 `value: float`、`attrs: dict[str, Any]`、`artifact_refs: list[str]`
 - 若业务不涉及 ground truth，可返回占位 `GroundTruthData`，在评估逻辑中忽略
 
