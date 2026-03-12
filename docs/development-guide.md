@@ -331,9 +331,7 @@ class Checkpoint {
 }
 
 class RunResult {
-  +map metrics
-  +map diagnostics
-  +list artifact_refs
+  +any payload
 }
 
 class ObjectiveResult {
@@ -1122,16 +1120,9 @@ class ResultStore(Protocol):
 
 ```json
 {
-  "metrics": {
-    "metric_1": 0.12,
-    "metric_2": 15.8
-  },
-  "diagnostics": {
-    "runtime_sec": 412.5
-  },
-  "artifact_refs": [
-    "s3://bucket/path/report.json"
-  ]
+  "payload": {
+    "any_raw_result_shape": true
+  }
 }
 ```
 
@@ -1811,9 +1802,7 @@ class Checkpoint:
 
 @dataclass(frozen=True)
 class RunResult:
-    metrics: dict
-    diagnostics: dict
-    artifact_refs: list[str]
+    payload: Any
 
 @dataclass(frozen=True)
 class ObjectiveResult:

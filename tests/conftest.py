@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from pathlib import Path
 from typing import Any
 
 from optimization_control_plane.domain.models import (
@@ -163,11 +165,20 @@ class StubObjectiveEvaluator:
         spec: ExperimentSpec,
         groundtruth: GroundTruthData,
     ) -> ObjectiveResult:
-        value = run_result.metrics.get(self._metric, 0.0)
+        payload = run_result.payload
+        if not isinstance(payload, dict):
+            raise TypeError("run_result.payload must be a dict for StubObjectiveEvaluator")
+        metrics = payload.get("metrics", {})
+        if not isinstance(metrics, dict):
+            raise TypeError("run_result.payload.metrics must be a dict for StubObjectiveEvaluator")
+        artifact_refs = payload.get("artifact_refs", [])
+        if not isinstance(artifact_refs, list):
+            raise TypeError("run_result.payload.artifact_refs must be a list for StubObjectiveEvaluator")
+        value = metrics.get(self._metric, 0.0)
         return ObjectiveResult(
             value=float(value),
             attrs={"metric": self._metric, "groundtruth_fingerprint": groundtruth.fingerprint},
-            artifact_refs=list(run_result.artifact_refs),
+            artifact_refs=list(artifact_refs),
         )
 
 
@@ -211,3 +222,14 @@ class StubTrialResultAggregator:
         total = sum(result.value for _, result in results)
         attrs = {"aggregated_dataset_count": len(results)}
         return ObjectiveResult(value=total / len(results), attrs=attrs, artifact_refs=[])
+
+
+class StubRunResultLoader:
+    def load(self, run_spec: RunSpec) -> RunResult:
+        path = Path(run_spec.result_path)
+        if not path.exists():
+            raise FileNotFoundError(f"run result file not found: {path}")
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise TypeError("run result file must contain a JSON object")
+        return RunResult(payload=data["payload"])

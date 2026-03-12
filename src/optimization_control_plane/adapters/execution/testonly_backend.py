@@ -116,12 +116,8 @@ class FakeExecutionBackend:
     def _write_result_file(self, request: ExecutionRequest, script: FakeRunScript) -> None:
         if script.final_event != EventKind.COMPLETED:
             return
-        result = script.run_result or RunResult(metrics={}, diagnostics={}, artifact_refs=[])
+        result = script.run_result or RunResult(payload={})
         path = Path(request.run_spec.result_path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "metrics": result.metrics,
-            "diagnostics": result.diagnostics,
-            "artifact_refs": result.artifact_refs,
-        }
+        payload = {"payload": result.payload}
         path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")

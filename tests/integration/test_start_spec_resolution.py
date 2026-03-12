@@ -15,7 +15,6 @@ from optimization_control_plane.adapters.policies import (
 )
 from optimization_control_plane.adapters.storage import (
     FileObjectiveCache,
-    FileRunResultLoader,
     FileResultStore,
     FileRunCache,
 )
@@ -26,6 +25,7 @@ from tests.conftest import (
     StubObjectiveEvaluator,
     StubObjectiveKeyBuilder,
     StubRunKeyBuilder,
+    StubRunResultLoader,
     StubRunSpecBuilder,
     StubSearchSpace,
     StubTrialResultAggregator,
@@ -52,7 +52,7 @@ def _build_orchestrator(tmp_path: str) -> TrialOrchestrator:
         execution_backend=FakeExecutionBackend(),
         parallelism_policy=AsyncFillParallelismPolicy(),
         dispatch_policy=SubmitNowDispatchPolicy(),
-        run_result_loader=FileRunResultLoader(),
+        run_result_loader=StubRunResultLoader(),
         run_cache=FileRunCache(os.path.join(tmp_path, "data")),
         objective_cache=FileObjectiveCache(os.path.join(tmp_path, "data")),
         result_store=FileResultStore(os.path.join(tmp_path, "data")),

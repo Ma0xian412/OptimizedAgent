@@ -72,9 +72,7 @@ class Checkpoint:
 
 @dataclass(frozen=True)
 class RunResult:
-    metrics: dict[str, Any]
-    diagnostics: dict[str, Any]
-    artifact_refs: list[str] = field(default_factory=list)
+    payload: Any
 
 
 @dataclass(frozen=True)

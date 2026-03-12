@@ -15,7 +15,6 @@ from optimization_control_plane.adapters.policies import (
 )
 from optimization_control_plane.adapters.storage import (
     FileObjectiveCache,
-    FileRunResultLoader,
     FileResultStore,
     FileRunCache,
 )
@@ -28,6 +27,7 @@ from tests.conftest import (
     StubObjectiveEvaluator,
     StubObjectiveKeyBuilder,
     StubRunKeyBuilder,
+    StubRunResultLoader,
     StubRunSpecBuilder,
     StubSearchSpace,
     StubTrialResultAggregator,
@@ -46,7 +46,7 @@ class DelayedCompletionBackend:
         result_file = Path(request.run_spec.result_path)
         result_file.parent.mkdir(parents=True, exist_ok=True)
         result_file.write_text(
-            '{"metrics":{"metric_1":0.5},"diagnostics":{},"artifact_refs":[]}',
+            '{"payload":{"metrics":{"metric_1":0.5},"diagnostics":{},"artifact_refs":[]}}',
             encoding="utf-8",
         )
         self._handle = RunHandle(
@@ -102,7 +102,7 @@ class TestGracefulStop:
             execution_backend=exec_be,
             parallelism_policy=AsyncFillParallelismPolicy(),
             dispatch_policy=SubmitNowDispatchPolicy(),
-            run_result_loader=FileRunResultLoader(),
+            run_result_loader=StubRunResultLoader(),
             run_cache=FileRunCache(os.path.join(str(tmp_path), "data")),
             objective_cache=FileObjectiveCache(os.path.join(str(tmp_path), "data")),
             result_store=FileResultStore(os.path.join(str(tmp_path), "data")),
