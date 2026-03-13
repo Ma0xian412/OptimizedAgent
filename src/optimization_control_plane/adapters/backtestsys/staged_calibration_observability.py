@@ -28,6 +28,7 @@ class StagedCalibrationProgressReporter:
         self._output_format = output_format
         self._output_path = runtime_root / "progress.jsonl"
         self._lock = threading.Lock()
+        self._last_progress_metrics_by_stage: dict[str, tuple[tuple[str, int], ...]] = {}
 
     def run_started(self, *, unit_total: int, dataset_count: int) -> None:
         payload = {
@@ -82,6 +83,8 @@ class StagedCalibrationProgressReporter:
         self._emit("stage_failed", event_payload, text)
 
     def stage_progress(self, ctx: StageProgressContext, metrics: Mapping[str, int]) -> None:
+        if self._is_duplicate_progress(ctx, metrics):
+            return
         stage_progress = _trial_progress(metrics, ctx.max_trials)
         payload = self._with_stage_payload(ctx=ctx, stage_progress=stage_progress, payload={"metrics": dict(metrics)})
         text = (
@@ -135,6 +138,15 @@ class StagedCalibrationProgressReporter:
             print(line)
             return
         print(f"[iter_backtestsys] {text_message}")
+
+    def _is_duplicate_progress(self, ctx: StageProgressContext, metrics: Mapping[str, int]) -> bool:
+        normalized_metrics = tuple(sorted((str(key), int(value)) for key, value in metrics.items()))
+        with self._lock:
+            previous_metrics = self._last_progress_metrics_by_stage.get(ctx.stage_name)
+            if previous_metrics == normalized_metrics:
+                return True
+            self._last_progress_metrics_by_stage[ctx.stage_name] = normalized_metrics
+        return False
 
     @staticmethod
     def _elapsed_seconds(started_at: float) -> float:
