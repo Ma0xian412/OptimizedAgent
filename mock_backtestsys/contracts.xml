@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ContractDictionaryConfig>
+    <Contract>
+        <ContractId>TEST_CONTRACT</ContractId>
+        <ResultContractId>1</ResultContractId>
+        <PartitionDay>20260312</PartitionDay>
+        <TickSize>1.0</TickSize>
+        <ExchangeCode>TEST_EXCHANGE</ExchangeCode>
+        <MachineName>m1</MachineName>
+        <TradingHours>
+            <TradingHour>
+                <StartTime>09:30:00</StartTime>
+                <EndTime>15:00:00</EndTime>
+            </TradingHour>
+        </TradingHours>
+    </Contract>
+</ContractDictionaryConfig>

@@ -56,8 +56,9 @@ def build_trial_objective_key(
     params: dict[str, object],
     dataset_ids: tuple[str, ...],
     spec: ExperimentSpec,
-    groundtruth_fingerprint: str,
+    groundtruth_fingerprints: dict[str, str],
 ) -> str:
+    fingerprint_items = _normalized_groundtruth_items(dataset_ids, groundtruth_fingerprints)
     payload = stable_json_serialize(
         {
             "kind": "trial_objective",
@@ -66,8 +67,23 @@ def build_trial_objective_key(
             "params": params,
             "dataset_ids": sorted(dataset_ids),
             "objective_config": spec.objective_config,
-            "groundtruth_fingerprint": groundtruth_fingerprint,
+            "groundtruth_fingerprints": fingerprint_items,
         }
     )
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
     return f"trial_obj:{digest[:24]}"
+
+
+def _normalized_groundtruth_items(
+    dataset_ids: tuple[str, ...],
+    groundtruth_fingerprints: dict[str, str],
+) -> tuple[tuple[str, str], ...]:
+    items: list[tuple[str, str]] = []
+    for dataset_id in dataset_ids:
+        fingerprint = groundtruth_fingerprints.get(dataset_id)
+        if not isinstance(fingerprint, str) or not fingerprint:
+            raise ValueError(
+                f"groundtruth fingerprint for dataset_id={dataset_id} must be a non-empty string"
+            )
+        items.append((dataset_id, fingerprint))
+    return tuple(items)

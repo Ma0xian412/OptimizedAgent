@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from optimization_control_plane.core.objective_definition import ObjectiveDefinition
-from optimization_control_plane.core.orchestration.inflight_registry import RunBinding
 from optimization_control_plane.core.orchestration._trial_utils import (
     scope_objective_key,
     validate_run_spec,
 )
+from optimization_control_plane.core.orchestration.inflight_registry import RunBinding
 from optimization_control_plane.domain.models import ExperimentSpec, GroundTruthData
 
 
@@ -22,7 +22,7 @@ def build_bindings(
     *,
     objective_def: ObjectiveDefinition,
     spec: ExperimentSpec,
-    groundtruth: GroundTruthData,
+    groundtruth_by_dataset: dict[str, GroundTruthData],
     params: dict[str, object],
     dataset_ids: tuple[str, ...],
     trial_id: str,
@@ -32,6 +32,10 @@ def build_bindings(
 ) -> tuple[RunBinding, ...]:
     bindings: list[RunBinding] = []
     for dataset_id in dataset_ids:
+        groundtruth = _groundtruth_for_dataset(
+            groundtruth_by_dataset=groundtruth_by_dataset,
+            dataset_id=dataset_id,
+        )
         run_spec = objective_def.run_spec_builder.build(params, spec, dataset_id)
         validate_run_spec(run_spec)
         run_key = objective_def.run_key_builder.build(run_spec, spec, dataset_id)
@@ -49,3 +53,14 @@ def build_bindings(
             )
         )
     return tuple(bindings)
+
+
+def _groundtruth_for_dataset(
+    *,
+    groundtruth_by_dataset: dict[str, GroundTruthData],
+    dataset_id: str,
+) -> GroundTruthData:
+    data = groundtruth_by_dataset.get(dataset_id)
+    if data is None:
+        raise KeyError(f"missing groundtruth for dataset_id={dataset_id}")
+    return data

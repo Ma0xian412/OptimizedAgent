@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from optimization_control_plane.adapters.backtestsys import BackTestSearchSpaceAdapter
+from optimization_control_plane.adapters.backtestsys import (
+    BackTestCoreParamsSearchSpaceAdapter,
+)
 from tests.conftest import make_spec
 
 
@@ -33,26 +35,28 @@ class RecordingCtx:
         return False
 
 
-class TestBackTestSearchSpaceAdapter:
-    def test_sample_four_backtest_parameters(self) -> None:
-        adapter = BackTestSearchSpaceAdapter()
-        spec = make_spec(
-            objective_config={
-                "name": "loss",
-                "version": "v1",
-                "direction": "minimize",
-                "params": {},
-                "groundtruth": {"version": "gt_v1", "path": "/tmp/gt.json"},
-                "sampler": {"type": "random", "seed": 42},
-                "pruner": {"type": "nop"},
-                "backtest_search_space": {
-                    "time_scale_lambda": {"low": -0.5, "high": 0.5},
-                    "cancel_bias_k": {"low": -1.0, "high": 1.0},
-                    "delay_in": {"low": 0, "high": 1000000},
-                    "delay_out": {"low": 1000, "high": 2000},
-                },
-            }
-        )
+def _base_objective_config() -> dict[str, object]:
+    return {
+        "name": "loss",
+        "version": "v1",
+        "direction": "minimize",
+        "params": {},
+        "groundtruth": {"version": "gt_v1", "path": "/tmp/gt.json"},
+        "sampler": {"type": "random", "seed": 42},
+        "pruner": {"type": "nop"},
+    }
+
+
+class TestBackTestCoreParamsSearchSpaceAdapter:
+    def test_sample_two_params_with_fixed_delay(self) -> None:
+        adapter = BackTestCoreParamsSearchSpaceAdapter()
+        objective_config = _base_objective_config()
+        objective_config["backtest_search_space"] = {
+            "time_scale_lambda": {"low": -0.5, "high": 0.5},
+            "cancel_bias_k": {"low": -1.0, "high": 1.0},
+        }
+        objective_config["backtest_fixed_params"] = {"delay": 123}
+        spec = make_spec(objective_config=objective_config)
         ctx = RecordingCtx()
 
         sampled = adapter.sample(ctx, spec)
@@ -60,21 +64,18 @@ class TestBackTestSearchSpaceAdapter:
         assert sampled == {
             "time_scale_lambda": 0.0,
             "cancel_bias_k": 0.0,
-            "delay_in": 1000000,
-            "delay_out": 2000,
+            "delay_in": 123,
+            "delay_out": 123,
         }
         assert ctx.float_calls == [
             ("time_scale_lambda", -0.5, 0.5),
             ("cancel_bias_k", -1.0, 1.0),
         ]
-        assert ctx.int_calls == [
-            ("delay_in", 0, 1000000),
-            ("delay_out", 1000, 2000),
-        ]
+        assert ctx.int_calls == []
         assert ctx.attrs["backtest_config_patch"] == sampled
 
     def test_missing_search_space_config_raises(self) -> None:
-        adapter = BackTestSearchSpaceAdapter()
+        adapter = BackTestCoreParamsSearchSpaceAdapter()
         spec = make_spec()
 
         with pytest.raises(
@@ -83,28 +84,18 @@ class TestBackTestSearchSpaceAdapter:
         ):
             adapter.sample(RecordingCtx(), spec)
 
-    def test_invalid_integer_range_raises(self) -> None:
-        adapter = BackTestSearchSpaceAdapter()
-        spec = make_spec(
-            objective_config={
-                "name": "loss",
-                "version": "v1",
-                "direction": "minimize",
-                "params": {},
-                "groundtruth": {"version": "gt_v1", "path": "/tmp/gt.json"},
-                "sampler": {"type": "random", "seed": 42},
-                "pruner": {"type": "nop"},
-                "backtest_search_space": {
-                    "time_scale_lambda": {"low": -0.5, "high": 0.5},
-                    "cancel_bias_k": {"low": -1.0, "high": 1.0},
-                    "delay_in": {"low": 0.0, "high": 1000000},
-                    "delay_out": {"low": 0, "high": 1000},
-                },
-            }
-        )
+    def test_invalid_fixed_delay_type_raises(self) -> None:
+        adapter = BackTestCoreParamsSearchSpaceAdapter()
+        objective_config = _base_objective_config()
+        objective_config["backtest_search_space"] = {
+            "time_scale_lambda": {"low": -0.5, "high": 0.5},
+            "cancel_bias_k": {"low": -1.0, "high": 1.0},
+        }
+        objective_config["backtest_fixed_params"] = {"delay": 1.0}
+        spec = make_spec(objective_config=objective_config)
 
         with pytest.raises(
             ValueError,
-            match="backtest_search_space.delay_in low/high must be int",
+            match="backtest_fixed_params.delay must be int",
         ):
             adapter.sample(RecordingCtx(), spec)

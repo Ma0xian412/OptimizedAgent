@@ -5,6 +5,12 @@ import os
 import xml.etree.ElementTree as ET
 from typing import Any
 
+from optimization_control_plane.adapters.backtestsys.run_spec_binding import (
+    DatasetInput,
+    read_param_binding_config,
+    resolve_dataset_input,
+    resolve_effective_params,
+)
 from optimization_control_plane.domain.models import (
     ExperimentSpec,
     Job,
@@ -14,12 +20,7 @@ from optimization_control_plane.domain.models import (
 )
 
 _RUN_SPEC_KEY = "backtest_run_spec"
-_REQUIRED_PARAM_NAMES = (
-    "time_scale_lambda",
-    "cancel_bias_k",
-    "delay_in",
-    "delay_out",
-)
+_REQUIRED_PARAM_NAMES = ("time_scale_lambda", "cancel_bias_k", "delay_in", "delay_out")
 
 
 class BackTestRunSpecBuilderAdapter:
@@ -32,19 +33,26 @@ class BackTestRunSpecBuilderAdapter:
         dataset_id: str,
     ) -> RunSpec:
         run_cfg = _read_run_spec_config(spec)
-        normalized_params = _normalize_params(params)
-        digest = _build_digest(spec, dataset_id, normalized_params)
+        trial_params = _normalize_params(params)
+        binding = read_param_binding_config(run_cfg, as_int=_as_int, as_float=_as_float)
+        dataset_input = resolve_dataset_input(run_cfg, dataset_id)
+        effective_params = resolve_effective_params(
+            dataset_id=dataset_id,
+            trial_params=trial_params,
+            dataset_input=dataset_input,
+            binding=binding,
+        )
+        digest = _build_digest(spec, dataset_id, effective_params)
         output_root = _read_required_string(run_cfg, "output_root_dir")
         config_path = os.path.join(output_root, "configs", f"{dataset_id}_{digest}.xml")
         result_dir = os.path.join(output_root, "results", f"{dataset_id}_{digest}")
         os.makedirs(os.path.dirname(config_path), exist_ok=True)
         os.makedirs(result_dir, exist_ok=True)
-
         _write_trial_config(
             base_config_path=_read_required_string(run_cfg, "base_config_path"),
             config_path=config_path,
-            params=normalized_params,
-            dataset_path=_resolve_dataset_path(run_cfg, dataset_id),
+            params=effective_params,
+            dataset_input=dataset_input,
         )
         return RunSpec(
             job=_build_job(run_cfg, config_path, result_dir),
@@ -72,29 +80,9 @@ def _normalize_params(params: dict[str, object]) -> dict[str, object]:
     return normalized
 
 
-def _as_float(value: object, name: str) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        raise ValueError(f"param {name} must be float-like")
-    return float(value)
-
-
-def _as_int(value: object, name: str) -> int:
-    if not isinstance(value, int) or isinstance(value, bool):
-        raise ValueError(f"param {name} must be int")
-    return value
-
-
-def _build_digest(
-    spec: ExperimentSpec,
-    dataset_id: str,
-    params: dict[str, object],
-) -> str:
+def _build_digest(spec: ExperimentSpec, dataset_id: str, params: dict[str, object]) -> str:
     payload = stable_json_serialize(
-        {
-            "spec_hash": spec.spec_hash,
-            "dataset_id": dataset_id,
-            "params": params,
-        }
+        {"spec_hash": spec.spec_hash, "dataset_id": dataset_id, "params": params}
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
 
@@ -104,7 +92,7 @@ def _write_trial_config(
     base_config_path: str,
     config_path: str,
     params: dict[str, object],
-    dataset_path: str | None,
+    dataset_input: DatasetInput,
 ) -> None:
     if not os.path.exists(base_config_path):
         raise FileNotFoundError(f"base config.xml not found: {base_config_path}")
@@ -114,8 +102,9 @@ def _write_trial_config(
     _set_xml_text(root, ("exchange", "cancel_bias_k"), str(params["cancel_bias_k"]))
     _set_xml_text(root, ("runner", "delay_in"), str(params["delay_in"]))
     _set_xml_text(root, ("runner", "delay_out"), str(params["delay_out"]))
-    if dataset_path is not None:
-        _set_xml_text(root, ("data", "path"), dataset_path)
+    _set_xml_text(root, ("data", "path"), dataset_input.market_data_path)
+    _set_xml_text(root, ("strategy", "params", "order_file"), dataset_input.order_file)
+    _set_xml_text(root, ("strategy", "params", "cancel_file"), dataset_input.cancel_file)
     tree.write(config_path, encoding="utf-8", xml_declaration=True)
 
 
@@ -127,20 +116,6 @@ def _set_xml_text(root: ET.Element, path: tuple[str, ...], value: str) -> None:
             nxt = ET.SubElement(current, tag)
         current = nxt
     current.text = value
-
-
-def _resolve_dataset_path(run_cfg: dict[str, Any], dataset_id: str) -> str | None:
-    dataset_paths = run_cfg.get("dataset_paths")
-    if dataset_paths is None:
-        return None
-    if not isinstance(dataset_paths, dict):
-        raise ValueError(f"{_RUN_SPEC_KEY}.dataset_paths must be a dict")
-    value = dataset_paths.get(dataset_id)
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value:
-        raise ValueError(f"{_RUN_SPEC_KEY}.dataset_paths[{dataset_id}] must be a non-empty string")
-    return value
 
 
 def _build_job(run_cfg: dict[str, Any], config_path: str, result_dir: str) -> Job:
@@ -191,6 +166,18 @@ def _read_optional_int(source: dict[str, Any], key: str) -> int | None:
 def _as_positive_int(value: Any, key: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
         raise ValueError(f"{key} must be a positive int")
+    return value
+
+
+def _as_float(value: object, name: str) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"param {name} must be float-like")
+    return float(value)
+
+
+def _as_int(value: object, name: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError(f"param {name} must be int")
     return value
 
 
