@@ -5,11 +5,10 @@ from typing import Any
 
 from optimization_control_plane.domain.models import ExperimentSpec, ObjectiveResult
 
-_COMPONENTS = ("curve", "terminal", "cancel", "post")
+_COMPONENTS = ("curve", "terminal", "post")
 _DEFAULT_EPS = {
     "curve": 1e-12,
     "terminal": 1e-12,
-    "cancel": 1e-6,
     "post": 1e-12,
 }
 
@@ -68,25 +67,17 @@ def _aggregate_raw_values(dataset_objectives: list[_DatasetObjective]) -> dict[s
     )
     cancel_order_total = sum(item.cancel_order_count for item in dataset_objectives)
     if cancel_order_total > 0:
-        cancel_weighted_sum = sum(
-            item.cancel_order_count * _read_required_raw(item.raw, "cancel")
-            for item in dataset_objectives
-            if item.cancel_order_count > 0
-        )
         post_weighted_sum = sum(
             item.cancel_order_count * _read_required_raw(item.raw, "post")
             for item in dataset_objectives
             if item.cancel_order_count > 0
         )
-        cancel_raw = cancel_weighted_sum / float(cancel_order_total)
         post_raw = post_weighted_sum / float(cancel_order_total)
     else:
-        cancel_raw = None
         post_raw = None
     return {
         "curve": curve_raw,
         "terminal": terminal_raw,
-        "cancel": cancel_raw,
         "post": post_raw,
     }
 
@@ -113,7 +104,7 @@ def _resolve_available_components(
     if order_total > 0:
         available.extend(["curve", "terminal"])
     if cancel_order_total > 0:
-        available.extend(["cancel", "post"])
+        available.append("post")
     missing_raw = [name for name in available if raw_values.get(name) is None]
     if missing_raw:
         raise ValueError(f"missing raw values for available components: {missing_raw}")
@@ -190,6 +181,7 @@ def _read_component_map(
     raw = params.get(key)
     if not isinstance(raw, dict):
         raise ValueError(f"spec.objective_config.params.{key} must be a dict")
+    _raise_on_unknown_component_keys(raw, f"spec.objective_config.params.{key}")
     result: dict[str, float] = {}
     for name in _COMPONENTS:
         if name not in raw:
@@ -209,6 +201,7 @@ def _read_eps_map(params: dict[str, Any]) -> dict[str, float]:
         return dict(_DEFAULT_EPS)
     if not isinstance(raw_eps, dict):
         raise ValueError("spec.objective_config.params.eps must be a dict")
+    _raise_on_unknown_component_keys(raw_eps, "spec.objective_config.params.eps")
     result: dict[str, float] = {}
     for name in _COMPONENTS:
         if name not in raw_eps:
@@ -237,3 +230,9 @@ def _as_non_negative_float(value: Any, field_name: str, dataset_id: str) -> floa
     if cast_value < 0.0:
         raise ValueError(f"{field_name} for dataset={dataset_id} must be >= 0")
     return cast_value
+
+
+def _raise_on_unknown_component_keys(raw: dict[str, Any], field_name: str) -> None:
+    unknown = sorted(str(key) for key in raw.keys() if key not in _COMPONENTS)
+    if unknown:
+        raise ValueError(f"{field_name} has unsupported components: {unknown}")

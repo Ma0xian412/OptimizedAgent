@@ -30,7 +30,7 @@ from optimization_control_plane.domain.models import ExperimentSpec
 from optimization_control_plane.ports.optimizer_backend import TrialContext
 
 _BACKTEST_ATTR_KEY = "backtest_config_patch"
-_RAW_COMPONENTS = ("curve", "terminal", "cancel", "post")
+_RAW_COMPONENTS = ("curve", "terminal", "post")
 
 
 @dataclass(frozen=True)
@@ -245,11 +245,11 @@ def run_stage(runtime_root: Path, stage_name: str, settings: dict[str, Any], sea
 
 
 def _build_loss_params(baseline_raw: dict[str, float] | None) -> dict[str, object]:
-    baseline = baseline_raw or {"curve": 1.0, "terminal": 1.0, "cancel": 1.0, "post": 1.0}
+    baseline = baseline_raw or {"curve": 1.0, "terminal": 1.0, "post": 1.0}
     return {
-        "weights": {"curve": 0.5, "terminal": 0.5, "cancel": 0.0, "post": 0.0},
+        "weights": {"curve": 0.5, "terminal": 0.5, "post": 0.0},
         "baseline": dict(baseline),
-        "eps": {"curve": 1e-12, "terminal": 1e-12, "cancel": 1e-12, "post": 1e-12},
+        "eps": {"curve": 1e-12, "terminal": 1e-12, "post": 1e-12},
     }
 
 

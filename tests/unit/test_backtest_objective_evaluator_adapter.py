@@ -112,21 +112,21 @@ class TestBackTestObjectiveEvaluatorAdapter:
         raw = result.attrs["raw"]
         counts = result.attrs["counts"]
         availability = result.attrs["availability"]
+        assert result.attrs["loss_schema_version"] == "backtest_loss_v2"
         assert counts["order_count"] == 2
         assert counts["cancel_order_count"] == 1
         assert raw["curve"] == pytest.approx(3.0)
         assert raw["terminal"] == pytest.approx(0.3)
-        assert raw["cancel"] == pytest.approx(1.0)
+        assert "cancel" not in raw
         assert raw["post"] == pytest.approx(0.6)
         assert availability == {
             "curve": True,
             "terminal": True,
-            "cancel": True,
             "post": True,
         }
-        assert result.value == pytest.approx(1.225)
+        assert result.value == pytest.approx(1.3)
 
-    def test_evaluate_without_cancel_orders_marks_cancel_components_unavailable(self) -> None:
+    def test_evaluate_without_cancel_orders_marks_post_component_unavailable(self) -> None:
         run_result = RunResult(payload={
             "OrderInfo": [
                 {
@@ -175,10 +175,10 @@ class TestBackTestObjectiveEvaluatorAdapter:
 
         assert result.attrs["raw"]["curve"] == 0.0
         assert result.attrs["raw"]["terminal"] == 0.0
-        assert result.attrs["raw"]["cancel"] is None
+        assert "cancel" not in result.attrs["raw"]
         assert result.attrs["raw"]["post"] is None
         assert result.attrs["counts"]["cancel_order_count"] == 0
-        assert result.attrs["availability"]["cancel"] is False
+        assert "cancel" not in result.attrs["availability"]
         assert result.attrs["availability"]["post"] is False
         assert result.value == 0.0
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-_LOSS_SCHEMA_VERSION = "backtest_loss_v1"
+_LOSS_SCHEMA_VERSION = "backtest_loss_v2"
 _DONE_INFO_TABLE = "DoneInfo"
 _EXECUTION_DETAIL_TABLE = "ExecutionDetail"
 _ORDER_INFO_TABLE = "OrderInfo"
@@ -11,7 +11,6 @@ _CANCEL_REQUEST_TABLE = "CancelRequest"
 _STATE_FULL = "A"
 _STATE_PARTIAL = "P"
 _STATE_NONE = "N"
-_CANCEL_SUCCESS_STATES = frozenset({_STATE_PARTIAL, _STATE_NONE})
 
 
 @dataclass(frozen=True)

@@ -73,7 +73,6 @@ class BackTestObjectiveEvaluatorAdapter:
             "raw": {
                 "curve": raw_metrics.curve,
                 "terminal": raw_metrics.terminal,
-                "cancel": raw_metrics.cancel,
                 "post": raw_metrics.post,
             },
             "counts": {
@@ -83,7 +82,6 @@ class BackTestObjectiveEvaluatorAdapter:
             "availability": {
                 "curve": True,
                 "terminal": True,
-                "cancel": raw_metrics.cancel is not None,
                 "post": raw_metrics.post is not None,
             },
         }

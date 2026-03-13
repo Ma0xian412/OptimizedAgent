@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from optimization_control_plane.adapters.backtestsys.backtest_loss_parsing import (
-    _CANCEL_SUCCESS_STATES,
     DoneInfoRow,
     ExecutionRow,
     OrderInfoRow,
@@ -15,7 +14,6 @@ from optimization_control_plane.adapters.backtestsys.backtest_loss_parsing impor
 class DailyRawMetrics:
     curve: float
     terminal: float
-    cancel: float | None
     post: float | None
     order_count: int
     cancel_order_count: int
@@ -33,7 +31,6 @@ def calculate_daily_raw_metrics(
 ) -> DailyRawMetrics:
     curve_losses: list[float] = []
     terminal_losses: list[float] = []
-    cancel_losses: list[float] = []
     post_losses: list[float] = []
     for key in evaluation_keys:
         order_info = order_info_by_key[key]
@@ -54,10 +51,9 @@ def calculate_daily_raw_metrics(
             real_execs=gt_execs,
             sim_execs=sim_execs,
         ))
-        append_cancel_related_losses(
+        append_post_cancel_loss(
             key=key,
             cancel_time_by_key=cancel_time_by_key,
-            cancel_losses=cancel_losses,
             post_losses=post_losses,
             quantity=order_info.quantity,
             gt_done=gt_done,
@@ -68,18 +64,16 @@ def calculate_daily_raw_metrics(
     return DailyRawMetrics(
         curve=mean(curve_losses),
         terminal=mean(terminal_losses),
-        cancel=mean(cancel_losses) if cancel_losses else None,
         post=mean(post_losses) if post_losses else None,
         order_count=len(evaluation_keys),
-        cancel_order_count=len(cancel_losses),
+        cancel_order_count=len(post_losses),
     )
 
 
-def append_cancel_related_losses(
+def append_post_cancel_loss(
     *,
     key: OrderKey,
     cancel_time_by_key: dict[OrderKey, int],
-    cancel_losses: list[float],
     post_losses: list[float],
     quantity: int,
     gt_done: DoneInfoRow,
@@ -90,7 +84,6 @@ def append_cancel_related_losses(
     cancel_time = cancel_time_by_key.get(key)
     if cancel_time is None:
         return
-    cancel_losses.append(cancel_loss(real_state=gt_done.state, sim_state=sim_done.state))
     post_losses.append(post_loss(
         quantity=quantity,
         cancel_time=cancel_time,
@@ -137,12 +130,6 @@ def terminal_loss(
     real_total = sum_execution_volume(real_execs)
     sim_total = sum_execution_volume(sim_execs)
     return abs(real_total - sim_total) / float(quantity)
-
-
-def cancel_loss(*, real_state: str, sim_state: str) -> float:
-    real_cancel_success = real_state in _CANCEL_SUCCESS_STATES
-    sim_cancel_success = sim_state in _CANCEL_SUCCESS_STATES
-    return 0.0 if real_cancel_success == sim_cancel_success else 1.0
 
 
 def post_loss(
@@ -209,8 +196,6 @@ def sum_volume_in_window(
 
 def daily_intermediate_value(metrics: DailyRawMetrics) -> float:
     components: list[float] = [metrics.curve, metrics.terminal]
-    if metrics.cancel is not None:
-        components.append(metrics.cancel)
     if metrics.post is not None:
         components.append(metrics.post)
     return mean(components)
