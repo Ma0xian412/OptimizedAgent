@@ -13,7 +13,11 @@ from backtestsys_visualizer.charts import (
     export_figures,
 )
 from backtestsys_visualizer.loader import discover_run_dirs, load_trial_points, to_dataframe
-from backtestsys_visualizer.run_gt_analysis import load_run_gt_trial_dataframe
+from backtestsys_visualizer.run_gt_analysis import (
+    aggregate_run_gt_dataset_dataframe,
+    load_run_gt_dataset_dataframe,
+    load_run_gt_trial_dataframe,
+)
 
 _ENV_RUNTIME_ROOT = "BACKTESTSYS_VIS_RUNTIME_ROOT"
 _ENV_RUN_TAG = "BACKTESTSYS_VIS_RUN_TAG"
@@ -113,12 +117,28 @@ def _export_run_gt_assets(
     selected_stages: set[str] | None,
 ) -> list[Path]:
     run_gt_df = load_run_gt_trial_dataframe(run_root=run_dir, selected_stages=selected_stages)
-    if run_gt_df.empty:
+    run_gt_dataset_df = load_run_gt_dataset_dataframe(run_root=run_dir, selected_stages=selected_stages)
+    if run_gt_df.empty or run_gt_dataset_df.empty:
         return []
     exported: list[Path] = []
     csv_path = output_dir / "run_gt_metrics.csv"
     run_gt_df.to_csv(csv_path, index=False)
     exported.append(csv_path)
+    dataset_csv_path = output_dir / "run_gt_dataset_metrics.csv"
+    run_gt_dataset_df.to_csv(dataset_csv_path, index=False)
+    exported.append(dataset_csv_path)
+    machine_csv_path = output_dir / "run_gt_group_metrics_by_machine.csv"
+    aggregate_run_gt_dataset_dataframe(run_gt_dataset_df, group_by="machine").to_csv(machine_csv_path, index=False)
+    exported.append(machine_csv_path)
+    contract_csv_path = output_dir / "run_gt_group_metrics_by_contract.csv"
+    aggregate_run_gt_dataset_dataframe(run_gt_dataset_df, group_by="contract").to_csv(contract_csv_path, index=False)
+    exported.append(contract_csv_path)
+    machine_contract_csv_path = output_dir / "run_gt_group_metrics_by_machine_contract.csv"
+    aggregate_run_gt_dataset_dataframe(run_gt_dataset_df, group_by="machine_contract").to_csv(
+        machine_contract_csv_path,
+        index=False,
+    )
+    exported.append(machine_contract_csv_path)
     metric_title = {
         "state_match_rate": "DoneState 一致率",
         "done_time_mae": "DoneTime 绝对误差均值",

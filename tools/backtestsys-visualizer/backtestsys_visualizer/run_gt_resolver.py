@@ -11,6 +11,7 @@ from typing import Any
 import optuna
 
 from backtestsys_visualizer.models import stage_sort_key
+from backtestsys_visualizer.run_gt_param_binding import resolve_effective_params
 
 _SPEC_HASH_ATTR = "spec_hash"
 _SPEC_JSON_ATTR = "spec_json"
@@ -18,12 +19,20 @@ _PARAM_PATCH_ATTR = "backtest_config_patch"
 
 
 @dataclass(frozen=True)
+class DatasetTrialPayload:
+    dataset_id: str
+    machine: str | None
+    contract: str | None
+    sim_payload: dict[str, Any]
+    gt_tables: dict[str, list[dict[str, str]]]
+
+
+@dataclass(frozen=True)
 class StageTrialPayload:
     stage_name: str
     trial_number: int
     expected_dataset_count: int
-    dataset_payloads: tuple[dict[str, Any], ...]
-    gt_tables: dict[str, list[dict[str, str]]]
+    dataset_payloads: tuple[DatasetTrialPayload, ...]
 
 
 def discover_stage_dirs(*, run_root: Path, selected_stages: set[str] | None) -> list[Path]:
@@ -52,12 +61,10 @@ def load_stage_trial_payloads(stage_dir: Path) -> list[StageTrialPayload]:
     spec = json.loads(spec_json)
     if not isinstance(spec, dict):
         return []
-    gt_tables = _load_groundtruth_tables(spec)
-    if not gt_tables["DoneInfo"] or not gt_tables["ExecutionDetail"]:
-        return []
     dataset_ids = _resolve_dataset_ids(spec)
     if not dataset_ids:
         return []
+    gt_tables_by_dataset = _load_groundtruth_tables_by_dataset(spec=spec, dataset_ids=dataset_ids)
     payloads: list[StageTrialPayload] = []
     for trial in study.get_trials(deepcopy=False):
         if trial.state != optuna.trial.TrialState.COMPLETE:
@@ -71,6 +78,7 @@ def load_stage_trial_payloads(stage_dir: Path) -> list[StageTrialPayload]:
             spec_hash=spec_hash,
             dataset_ids=dataset_ids,
             trial_params=trial_params,
+            gt_tables_by_dataset=gt_tables_by_dataset,
         )
         if not dataset_payloads:
             continue
@@ -80,7 +88,6 @@ def load_stage_trial_payloads(stage_dir: Path) -> list[StageTrialPayload]:
                 trial_number=trial.number,
                 expected_dataset_count=len(dataset_ids),
                 dataset_payloads=tuple(dataset_payloads),
-                gt_tables=gt_tables,
             )
         )
     return payloads
@@ -93,14 +100,18 @@ def _resolve_trial_dataset_payloads(
     spec_hash: str,
     dataset_ids: tuple[str, ...],
     trial_params: dict[str, object],
-) -> list[dict[str, Any]]:
+    gt_tables_by_dataset: dict[str, dict[str, list[dict[str, str]]]],
+) -> list[DatasetTrialPayload]:
     run_cfg = _read_run_cfg(spec)
-    payloads: list[dict[str, Any]] = []
+    payloads: list[DatasetTrialPayload] = []
     for dataset_id in dataset_ids:
+        gt_tables = gt_tables_by_dataset.get(dataset_id)
+        if gt_tables is None:
+            continue
         dataset_input = _read_dataset_input(run_cfg, dataset_id)
         if dataset_input is None:
             continue
-        effective_params = _resolve_effective_params(run_cfg, trial_params, dataset_input)
+        effective_params = resolve_effective_params(run_cfg, trial_params, dataset_input)
         config_path = _resolve_config_path(run_cfg, dataset_id, effective_params, spec_hash)
         if not config_path.is_file():
             continue
@@ -112,24 +123,66 @@ def _resolve_trial_dataset_payloads(
         )
         run_payload = _read_run_payload(stage_dir=stage_dir, run_key=run_key)
         if run_payload is not None:
-            payloads.append(run_payload)
+            payloads.append(
+                DatasetTrialPayload(
+                    dataset_id=dataset_id,
+                    machine=_read_optional_label(dataset_input, "machine"),
+                    contract=_read_optional_label(dataset_input, "contract"),
+                    sim_payload=run_payload,
+                    gt_tables=gt_tables,
+                )
+            )
     return payloads
 
 
-def _load_groundtruth_tables(spec: dict[str, Any]) -> dict[str, list[dict[str, str]]]:
+def _load_groundtruth_tables_by_dataset(
+    *,
+    spec: dict[str, Any],
+    dataset_ids: tuple[str, ...],
+) -> dict[str, dict[str, list[dict[str, str]]]]:
     obj_cfg = spec.get("objective_config")
     if not isinstance(obj_cfg, dict):
-        return {"DoneInfo": [], "ExecutionDetail": []}
+        return {}
     gt_cfg = obj_cfg.get("groundtruth")
     if not isinstance(gt_cfg, dict):
-        return {"DoneInfo": [], "ExecutionDetail": []}
-    done_path = gt_cfg.get("doneinfo_path")
-    exec_path = gt_cfg.get("executiondetail_path")
+        return {}
+    dataset_cfg_map = gt_cfg.get("datasets")
+    if not isinstance(dataset_cfg_map, dict):
+        dataset_cfg_map = {}
+    result: dict[str, dict[str, list[dict[str, str]]]] = {}
+    for dataset_id in dataset_ids:
+        gt_paths = _resolve_groundtruth_paths(
+            base_cfg=gt_cfg,
+            dataset_cfg=dataset_cfg_map.get(dataset_id),
+        )
+        if gt_paths is None:
+            continue
+        done_rows = _read_csv_rows(Path(gt_paths["doneinfo_path"]))
+        exec_rows = _read_csv_rows(Path(gt_paths["executiondetail_path"]))
+        if not done_rows or not exec_rows:
+            continue
+        result[dataset_id] = {
+            "DoneInfo": done_rows,
+            "ExecutionDetail": exec_rows,
+        }
+    return result
+
+
+def _resolve_groundtruth_paths(
+    *,
+    base_cfg: dict[str, Any],
+    dataset_cfg: object,
+) -> dict[str, str] | None:
+    source = dataset_cfg if isinstance(dataset_cfg, dict) else base_cfg
+    done_path = source.get("doneinfo_path") if isinstance(source, dict) else None
+    exec_path = source.get("executiondetail_path") if isinstance(source, dict) else None
     if not isinstance(done_path, str) or not isinstance(exec_path, str):
-        return {"DoneInfo": [], "ExecutionDetail": []}
+        return None
+    if not done_path or not exec_path:
+        return None
     return {
-        "DoneInfo": _read_csv_rows(Path(done_path)),
-        "ExecutionDetail": _read_csv_rows(Path(exec_path)),
+        "doneinfo_path": done_path,
+        "executiondetail_path": exec_path,
     }
 
 
@@ -179,38 +232,11 @@ def _read_dataset_input(run_cfg: dict[str, Any], dataset_id: str) -> dict[str, A
     return raw if isinstance(raw, dict) else None
 
 
-def _resolve_effective_params(
-    run_cfg: dict[str, Any],
-    trial_params: dict[str, object],
-    dataset_input: dict[str, Any],
-) -> dict[str, object]:
-    binding = run_cfg.get("param_binding")
-    if not isinstance(binding, dict) or binding.get("mode", "trial_global") == "trial_global":
-        return dict(trial_params)
-    machine = dataset_input.get("machine")
-    contract = dataset_input.get("contract")
-    machine_map = binding.get("machine_delay_map")
-    core_map = binding.get("contract_core_map")
-    if not isinstance(machine, str) or not isinstance(contract, str):
-        return dict(trial_params)
-    if not isinstance(machine_map, dict) or not isinstance(core_map, dict):
-        return dict(trial_params)
-    delay = machine_map.get(machine)
-    core = core_map.get(contract)
-    if not isinstance(delay, int) or isinstance(delay, bool):
-        return dict(trial_params)
-    if not isinstance(core, dict):
-        return dict(trial_params)
-    lam = core.get("time_scale_lambda")
-    bias = core.get("cancel_bias_k")
-    if not isinstance(lam, (int, float)) or not isinstance(bias, (int, float)):
-        return dict(trial_params)
-    return {
-        "time_scale_lambda": float(lam),
-        "cancel_bias_k": float(bias),
-        "delay_in": int(delay),
-        "delay_out": int(delay),
-    }
+def _read_optional_label(dataset_input: dict[str, Any], key: str) -> str | None:
+    value = dataset_input.get(key)
+    if isinstance(value, str) and value:
+        return value
+    return None
 
 
 def _resolve_config_path(run_cfg: dict[str, Any], dataset_id: str, params: dict[str, object], spec_hash: str) -> Path:

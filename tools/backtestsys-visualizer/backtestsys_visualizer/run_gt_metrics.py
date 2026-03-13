@@ -22,6 +22,9 @@ def evaluate_dataset_metrics(
     *,
     sim_payload: dict[str, Any],
     gt_tables: dict[str, list[dict[str, str]]],
+    dataset_id: str | None = None,
+    machine: str | None = None,
+    contract: str | None = None,
 ) -> dict[str, float] | None:
     orders = _evaluate_orders(sim_payload=sim_payload, gt_tables=gt_tables)
     if not orders:
@@ -29,6 +32,9 @@ def evaluate_dataset_metrics(
     cancel_orders = [item for item in orders if item.post_cancel_gap is not None]
     cancel_match_values = [item.cancel_state_match for item in cancel_orders if item.cancel_state_match is not None]
     return {
+        "dataset_id": dataset_id or "",
+        "machine": machine or "",
+        "contract": contract or "",
         "order_count": float(len(orders)),
         "cancel_order_count": float(len(cancel_orders)),
         "state_match_rate": _mean([item.state_match for item in orders]),

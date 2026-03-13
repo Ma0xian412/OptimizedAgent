@@ -8,7 +8,12 @@ import streamlit as st
 
 from backtestsys_visualizer.charts import build_default_figures, build_run_gt_metric_figure
 from backtestsys_visualizer.loader import discover_run_dirs, load_trial_points, to_dataframe
-from backtestsys_visualizer.run_gt_analysis import load_run_gt_trial_dataframe
+from backtestsys_visualizer.run_gt_analysis import (
+    aggregate_run_gt_dataset_dataframe,
+    filter_run_gt_dataset_dataframe,
+    load_run_gt_dataset_dataframe,
+    load_run_gt_trial_dataframe,
+)
 
 _ENV_RUNTIME_ROOT = "BACKTESTSYS_VIS_RUNTIME_ROOT"
 _ENV_RUN_TAG = "BACKTESTSYS_VIS_RUN_TAG"
@@ -123,9 +128,42 @@ def _render_table(df: pd.DataFrame) -> None:
 def _render_run_gt_section(*, run_root: Path, selected_stages: set[str]) -> None:
     st.subheader("RunResult vs GT（随迭代变化）")
     run_gt_df = load_run_gt_trial_dataframe(run_root=run_root, selected_stages=selected_stages)
-    if run_gt_df.empty:
+    dataset_df = load_run_gt_dataset_dataframe(run_root=run_root, selected_stages=selected_stages)
+    if run_gt_df.empty or dataset_df.empty:
         st.info("当前 run/stage 没有可用的 RunResult vs GT 对比数据。")
         return
+    filtered_dataset_df = _build_filtered_run_gt_dataset_df(dataset_df)
+    if filtered_dataset_df.empty:
+        st.warning("筛选后无可用数据。")
+        return
+    metric_key, metric_label = _select_run_gt_metric()
+    grouped_df_map = {
+        "trial": aggregate_run_gt_dataset_dataframe(filtered_dataset_df, group_by="trial"),
+        "machine": aggregate_run_gt_dataset_dataframe(filtered_dataset_df, group_by="machine"),
+        "contract": aggregate_run_gt_dataset_dataframe(filtered_dataset_df, group_by="contract"),
+        "machine_contract": aggregate_run_gt_dataset_dataframe(filtered_dataset_df, group_by="machine_contract"),
+    }
+    _render_run_gt_tabs(
+        grouped_df_map=grouped_df_map,
+        metric_key=metric_key,
+        metric_label=metric_label,
+        filtered_dataset_df=filtered_dataset_df,
+    )
+
+
+def _build_filtered_run_gt_dataset_df(dataset_df: pd.DataFrame) -> pd.DataFrame:
+    selected_machines = _multiselect_with_all(dataset_df, "machine", "筛选 machine")
+    selected_contracts = _multiselect_with_all(dataset_df, "contract", "筛选 contract")
+    selected_datasets = _multiselect_with_all(dataset_df, "dataset_id", "筛选 dataset")
+    return filter_run_gt_dataset_dataframe(
+        dataset_df,
+        machines=selected_machines,
+        contracts=selected_contracts,
+        dataset_ids=selected_datasets,
+    )
+
+
+def _select_run_gt_metric() -> tuple[str, str]:
     metric_options = {
         "state_match_rate": "DoneState 一致率",
         "done_time_mae": "DoneTime 绝对误差均值",
@@ -142,31 +180,52 @@ def _render_run_gt_section(*, run_root: Path, selected_stages: set[str]) -> None
         format_func=lambda key: metric_options[key],
         index=0,
     )
+    return metric_key, metric_options[metric_key]
+
+
+def _render_run_gt_tabs(
+    *,
+    grouped_df_map: dict[str, pd.DataFrame],
+    metric_key: str,
+    metric_label: str,
+    filtered_dataset_df: pd.DataFrame,
+) -> None:
+    tab_trial, tab_machine, tab_contract, tab_machine_contract, tab_dataset = st.tabs(
+        ["Trial汇总", "按Machine", "按Contract", "按Machine+Contract", "Dataset明细"]
+    )
+    with tab_trial:
+        _render_run_gt_metric_table(grouped_df_map["trial"], metric_key=metric_key, title_prefix=metric_label)
+    with tab_machine:
+        _render_run_gt_metric_table(grouped_df_map["machine"], metric_key=metric_key, title_prefix=metric_label)
+    with tab_contract:
+        _render_run_gt_metric_table(grouped_df_map["contract"], metric_key=metric_key, title_prefix=metric_label)
+    with tab_machine_contract:
+        _render_run_gt_metric_table(grouped_df_map["machine_contract"], metric_key=metric_key, title_prefix=metric_label)
+    with tab_dataset:
+        st.dataframe(filtered_dataset_df.sort_values(["global_iteration", "dataset_id"]), use_container_width=True)
+
+
+def _render_run_gt_metric_table(df: pd.DataFrame, *, metric_key: str, title_prefix: str) -> None:
+    if df.empty:
+        st.info("当前分组暂无数据。")
+        return
     figure = build_run_gt_metric_figure(
-        run_gt_df,
+        df,
         metric=metric_key,
-        title=f"{metric_options[metric_key]} 迭代曲线",
+        title=f"{title_prefix} 迭代曲线",
     )
     st.plotly_chart(figure, use_container_width=True)
-    table_cols = [
-        "global_iteration",
-        "stage",
-        "stage_iteration",
-        "trial_id",
-        "dataset_count",
-        "missing_dataset_count",
-        "order_count",
-        "cancel_order_count",
-        "state_match_rate",
-        "done_time_mae",
-        "sim_fill_ratio",
-        "gt_fill_ratio",
-        "fill_gap_ratio",
-        "terminal_raw_from_tables",
-        "cancel_state_match_rate",
-        "post_cancel_gap",
-    ]
-    st.dataframe(run_gt_df[table_cols].sort_values("global_iteration"), use_container_width=True)
+    st.dataframe(df.sort_values("global_iteration"), use_container_width=True)
+
+
+def _multiselect_with_all(df: pd.DataFrame, column: str, label: str) -> set[str] | None:
+    options = sorted({str(item) for item in df[column].dropna().tolist() if str(item)})
+    if not options:
+        return None
+    selected = st.multiselect(label, options=options, default=options)
+    if len(selected) == len(options):
+        return None
+    return set(selected)
 
 
 if __name__ == "__main__":
