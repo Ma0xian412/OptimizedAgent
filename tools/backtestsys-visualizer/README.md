@@ -54,6 +54,10 @@ python3 -m backtestsys_visualizer export \
 - `normalized_components.html/.png`
 - `trial_points.csv`
 - `run_gt_metrics.csv`
+- `run_gt_dataset_metrics.csv`
+- `run_gt_group_metrics_by_machine.csv`
+- `run_gt_group_metrics_by_contract.csv`
+- `run_gt_group_metrics_by_machine_contract.csv`
 - `run_gt_state_match_rate.html/.png`
 - `run_gt_done_time_mae.html/.png`
 - `run_gt_fill_gap_ratio.html/.png`
