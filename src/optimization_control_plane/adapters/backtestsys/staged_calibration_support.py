@@ -1,13 +1,25 @@
 from __future__ import annotations
+
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-import xml.etree.ElementTree as ET
+
 import optuna
+
 from optimization_control_plane.adapters.backtestsys import (
-    BackTestDatasetEnumeratorAdapter, BackTestGroundTruthProviderAdapter, BackTestObjectiveEvaluatorAdapter,
-    BackTestObjectiveKeyBuilderAdapter, BackTestRunKeyBuilderAdapter, BackTestRunResultLoaderAdapter,
-    BackTestRunSpecBuilderAdapter, BackTestTrialResultAggregatorAdapter,
+    BackTestDatasetEnumeratorAdapter,
+    BackTestGroundTruthProviderAdapter,
+    BackTestObjectiveEvaluatorAdapter,
+    BackTestObjectiveKeyBuilderAdapter,
+    BackTestRunKeyBuilderAdapter,
+    BackTestRunResultLoaderAdapter,
+    BackTestRunSpecBuilderAdapter,
+    BackTestTrialResultAggregatorAdapter,
+)
+from optimization_control_plane.adapters.backtestsys.staged_calibration_groundtruth import (
+    build_groundtruth_config,
+    collect_groundtruth_paths,
 )
 from optimization_control_plane.adapters.execution import MultiprocessExecutionBackend
 from optimization_control_plane.adapters.optuna import OptunaBackendAdapter
@@ -24,9 +36,25 @@ _RAW_COMPONENTS = ("curve", "terminal", "cancel", "post")
 @dataclass(frozen=True)
 class DatasetDefinition:
     dataset_id: str
-    market_data_file: str
+    market_data_path: Path
+    order_file: Path
+    cancel_file: Path
     machine: str
     contract: str
+    groundtruth_doneinfo_path: Path
+    groundtruth_executiondetail_path: Path
+
+
+@dataclass(frozen=True)
+class IntRange:
+    low: int
+    high: int
+
+
+@dataclass(frozen=True)
+class FloatRange:
+    low: float
+    high: float
 
 
 @dataclass(frozen=True)
@@ -47,9 +75,10 @@ class StageResult:
 @dataclass(frozen=True)
 class CalibrationConfig:
     workspace_root: Path
+    runtime_root: Path
     backtestsys_root: Path
     base_config_path: Path
-    mock_root: Path
+    python_executable: str
     datasets: tuple[DatasetDefinition, ...]
     max_failures: int
     baseline_trials: int
@@ -57,6 +86,9 @@ class CalibrationConfig:
     contract_core_trials: int
     verify_trials: int
     default_resources: dict[str, int]
+    delay_range: IntRange
+    time_scale_lambda_range: FloatRange
+    cancel_bias_k_range: FloatRange
 
 
 class FixedBacktestSearchSpaceAdapter:
@@ -70,54 +102,96 @@ class FixedBacktestSearchSpaceAdapter:
 
 
 def validate_required_paths(config: CalibrationConfig) -> None:
-    required = [config.backtestsys_root / "main.py", config.base_config_path, config.mock_root / "replay_orders.csv",
-                config.mock_root / "replay_cancels.csv", config.mock_root / "contracts.xml"]
-    required.extend(config.mock_root / item.market_data_file for item in config.datasets)
+    required = [config.backtestsys_root / "main.py", config.base_config_path, Path(config.python_executable)]
+    groundtruth = build_groundtruth_config(config.datasets)
+    for item in config.datasets:
+        required.extend(
+            [
+                item.market_data_path,
+                item.order_file,
+                item.cancel_file,
+                item.groundtruth_doneinfo_path,
+                item.groundtruth_executiondetail_path,
+            ]
+        )
+    required.extend(collect_groundtruth_paths(groundtruth))
     for path in required:
+        if not path.is_absolute():
+            raise ValueError(f"required path must be absolute: {path}")
         if not path.exists():
             raise FileNotFoundError(f"required path not found: {path}")
 
 
 def build_dataset_inputs(config: CalibrationConfig) -> dict[str, dict[str, str]]:
-    return {item.dataset_id: {"market_data_path": str(config.mock_root / item.market_data_file),
-                              "order_file": str(config.mock_root / "replay_orders.csv"),
-                              "cancel_file": str(config.mock_root / "replay_cancels.csv"),
-                              "machine": item.machine, "contract": item.contract}
-            for item in config.datasets}
+    return {
+        item.dataset_id: {
+            "market_data_path": str(item.market_data_path),
+            "order_file": str(item.order_file),
+            "cancel_file": str(item.cancel_file),
+            "machine": item.machine,
+            "contract": item.contract,
+        }
+        for item in config.datasets
+    }
 
 
-def build_settings(config: CalibrationConfig, runtime_root: Path, *, spec_id: str, dataset_inputs: dict[str, dict[str, str]],
-                   dataset_ids: list[str], baseline_raw: dict[str, float] | None, max_trials: int,
-                   backtest_search_space: dict[str, object] | None, backtest_fixed_params: dict[str, object] | None,
-                   param_binding: dict[str, object] | None) -> dict[str, Any]:
-    objective_config: dict[str, object] = {"name": "backtest_loss", "version": "v3_staged_calibration", "direction": "minimize",
-                                           "params": _build_loss_params(baseline_raw),
-                                           "groundtruth": {"doneinfo_path": str(config.mock_root / "groundtruth" / "PubOrderDoneInfoLog_m1_20260312_TEST_CONTRACT.csv"),
-                                                           "executiondetail_path": str(config.mock_root / "groundtruth" / "PubExecutionDetailLog_m1_20260312_TEST_CONTRACT.csv")}}
+def build_settings(
+    config: CalibrationConfig,
+    runtime_root: Path,
+    *,
+    spec_id: str,
+    dataset_inputs: dict[str, dict[str, str]],
+    dataset_ids: list[str],
+    baseline_raw: dict[str, float] | None,
+    max_trials: int,
+    backtest_search_space: dict[str, object] | None,
+    backtest_fixed_params: dict[str, object] | None,
+    param_binding: dict[str, object] | None,
+) -> dict[str, Any]:
+    objective_config: dict[str, object] = {
+        "name": "backtest_loss",
+        "version": "v3_staged_calibration",
+        "direction": "minimize",
+        "params": _build_loss_params(baseline_raw),
+        "groundtruth": build_groundtruth_config(config.datasets),
+    }
     if backtest_search_space is not None:
         objective_config["backtest_search_space"] = backtest_search_space
     if backtest_fixed_params is not None:
         objective_config["backtest_fixed_params"] = backtest_fixed_params
-    run_spec: dict[str, object] = {"backtestsys_root": str(config.backtestsys_root), "base_config_path": str(config.base_config_path),
-                                   "output_root_dir": str(runtime_root / "artifacts"), "dataset_inputs": dataset_inputs,
-                                   "python_executable": "python3"}
+    run_spec: dict[str, object] = {
+        "backtestsys_root": str(config.backtestsys_root),
+        "base_config_path": str(config.base_config_path),
+        "output_root_dir": str(runtime_root / "artifacts"),
+        "dataset_inputs": dataset_inputs,
+        "python_executable": config.python_executable,
+    }
     if param_binding is not None:
         run_spec["param_binding"] = param_binding
-    return {"spec_id": spec_id,
-            "meta": {"dataset_version": "mock_v2", "engine_version": "backtestsys_main_py", "dataset_ids": dataset_ids},
-            "objective_config": objective_config,
-            "execution_config": {"executor_kind": "backtest", "default_resources": dict(config.default_resources), "backtest_run_spec": run_spec},
-            "sampler": {"type": "random", "seed": 42}, "pruner": {"type": "nop"},
-            "parallelism": {"max_in_flight_trials": 1},
-            "stop": {"max_trials": max_trials, "max_failures": config.max_failures}}
+    return {
+        "spec_id": spec_id,
+        "meta": {"dataset_version": "mock_v2", "engine_version": "backtestsys_main_py", "dataset_ids": dataset_ids},
+        "objective_config": objective_config,
+        "execution_config": {
+            "executor_kind": "backtest",
+            "default_resources": dict(config.default_resources),
+            "backtest_run_spec": run_spec,
+        },
+        "sampler": {"type": "random", "seed": 42},
+        "pruner": {"type": "nop"},
+        "parallelism": {"max_in_flight_trials": 1},
+        "stop": {"max_trials": max_trials, "max_failures": config.max_failures},
+    }
 
 
 def read_default_params(base_config_path: Path) -> BacktestDefaults:
     root = ET.parse(base_config_path).getroot()
-    return BacktestDefaults(time_scale_lambda=float(_read_xml_text(root, ("tape", "time_scale_lambda"))),
-                            cancel_bias_k=float(_read_xml_text(root, ("exchange", "cancel_bias_k"))),
-                            delay_in=int(_read_xml_text(root, ("runner", "delay_in"))),
-                            delay_out=int(_read_xml_text(root, ("runner", "delay_out"))))
+    return BacktestDefaults(
+        time_scale_lambda=float(_read_xml_text(root, ("tape", "time_scale_lambda"))),
+        cancel_bias_k=float(_read_xml_text(root, ("exchange", "cancel_bias_k"))),
+        delay_in=int(_read_xml_text(root, ("runner", "delay_in"))),
+        delay_out=int(_read_xml_text(root, ("runner", "delay_out"))),
+    )
 
 
 def extract_baseline_raw(attrs: dict[str, object]) -> dict[str, float]:
@@ -157,18 +231,25 @@ def run_stage(runtime_root: Path, stage_name: str, settings: dict[str, Any], sea
     stage_root = runtime_root / "stages" / stage_name
     stage_root.mkdir(parents=True, exist_ok=True)
     storage_dsn = f"sqlite:///{(stage_root / 'study.db').resolve()}"
-    orchestrator = _build_orchestrator(storage_dsn=storage_dsn, data_root=stage_root / "ocp_data", search_space=search_space)
+    orchestrator = _build_orchestrator(
+        storage_dsn=storage_dsn, data_root=stage_root / "ocp_data", search_space=search_space
+    )
     orchestrator.start(settings=settings)
     best_trial = _load_best_trial(storage_dsn)
     if best_trial.value is None:
         raise ValueError("best trial value is missing")
-    return StageResult(best_value=float(best_trial.value), best_params=dict(best_trial.params), best_attrs=dict(best_trial.user_attrs))
+    return StageResult(
+        best_value=float(best_trial.value), best_params=dict(best_trial.params), best_attrs=dict(best_trial.user_attrs)
+    )
 
 
 def _build_loss_params(baseline_raw: dict[str, float] | None) -> dict[str, object]:
     baseline = baseline_raw or {"curve": 1.0, "terminal": 1.0, "cancel": 1.0, "post": 1.0}
-    return {"weights": {"curve": 0.5, "terminal": 0.5, "cancel": 0.0, "post": 0.0}, "baseline": dict(baseline),
-            "eps": {"curve": 1e-12, "terminal": 1e-12, "cancel": 1e-12, "post": 1e-12}}
+    return {
+        "weights": {"curve": 0.5, "terminal": 0.5, "cancel": 0.0, "post": 0.0},
+        "baseline": dict(baseline),
+        "eps": {"curve": 1e-12, "terminal": 1e-12, "cancel": 1e-12, "post": 1e-12},
+    }
 
 
 def _read_xml_text(root: ET.Element, path: tuple[str, ...]) -> str:
@@ -181,17 +262,28 @@ def _read_xml_text(root: ET.Element, path: tuple[str, ...]) -> str:
 
 
 def _build_orchestrator(*, storage_dsn: str, data_root: Path, search_space: object) -> TrialOrchestrator:
-    objective_def = ObjectiveDefinition(search_space=search_space, dataset_enumerator=BackTestDatasetEnumeratorAdapter(),
-                                        run_spec_builder=BackTestRunSpecBuilderAdapter(), run_key_builder=BackTestRunKeyBuilderAdapter(),
-                                        objective_key_builder=BackTestObjectiveKeyBuilderAdapter(),
-                                        trial_result_aggregator=BackTestTrialResultAggregatorAdapter(),
-                                        progress_scorer=None, objective_evaluator=BackTestObjectiveEvaluatorAdapter())
-    return TrialOrchestrator(backend=OptunaBackendAdapter(storage_dsn=storage_dsn), objective_def=objective_def,
-                             groundtruth_provider=BackTestGroundTruthProviderAdapter(),
-                             execution_backend=MultiprocessExecutionBackend(),
-                             parallelism_policy=AsyncFillParallelismPolicy(), dispatch_policy=SubmitNowDispatchPolicy(),
-                             run_result_loader=BackTestRunResultLoaderAdapter(), run_cache=FileRunCache(data_root),
-                             objective_cache=FileObjectiveCache(data_root), result_store=FileResultStore(data_root))
+    objective_def = ObjectiveDefinition(
+        search_space=search_space,
+        dataset_enumerator=BackTestDatasetEnumeratorAdapter(),
+        run_spec_builder=BackTestRunSpecBuilderAdapter(),
+        run_key_builder=BackTestRunKeyBuilderAdapter(),
+        objective_key_builder=BackTestObjectiveKeyBuilderAdapter(),
+        trial_result_aggregator=BackTestTrialResultAggregatorAdapter(),
+        progress_scorer=None,
+        objective_evaluator=BackTestObjectiveEvaluatorAdapter(),
+    )
+    return TrialOrchestrator(
+        backend=OptunaBackendAdapter(storage_dsn=storage_dsn),
+        objective_def=objective_def,
+        groundtruth_provider=BackTestGroundTruthProviderAdapter(),
+        execution_backend=MultiprocessExecutionBackend(),
+        parallelism_policy=AsyncFillParallelismPolicy(),
+        dispatch_policy=SubmitNowDispatchPolicy(),
+        run_result_loader=BackTestRunResultLoaderAdapter(),
+        run_cache=FileRunCache(data_root),
+        objective_cache=FileObjectiveCache(data_root),
+        result_store=FileResultStore(data_root),
+    )
 
 
 def _load_best_trial(storage_dsn: str) -> optuna.trial.FrozenTrial:

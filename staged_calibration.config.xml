@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<staged_calibration>
+  <workspace_root>/workspace</workspace_root>
+  <runtime_root>/workspace/runtime</runtime_root>
+  <backtestsys_root>/workspace/BackTestSys</backtestsys_root>
+  <base_config_path>/workspace/config.xml</base_config_path>
+  <python_executable>/usr/bin/python3</python_executable>
+
+  <max_failures>2</max_failures>
+  <baseline_trials>1</baseline_trials>
+  <machine_delay_trials>12</machine_delay_trials>
+  <contract_core_trials>12</contract_core_trials>
+  <verify_trials>1</verify_trials>
+
+  <default_resources>
+    <cpu>1</cpu>
+    <max_runtime_seconds>60</max_runtime_seconds>
+  </default_resources>
+
+  <search_ranges>
+    <delay>
+      <low>0</low>
+      <high>500000</high>
+    </delay>
+    <time_scale_lambda>
+      <low>-0.5</low>
+      <high>0.5</high>
+    </time_scale_lambda>
+    <cancel_bias_k>
+      <low>-1.0</low>
+      <high>1.0</high>
+    </cancel_bias_k>
+  </search_ranges>
+
+  <datasets>
+    <dataset>
+      <dataset_id>ds_01</dataset_id>
+      <market_data_path>/workspace/mock_backtestsys/market_data_ds_01.csv</market_data_path>
+      <order_file>/workspace/mock_backtestsys/replay_orders.csv</order_file>
+      <cancel_file>/workspace/mock_backtestsys/replay_cancels.csv</cancel_file>
+      <machine>m1</machine>
+      <contract>c1</contract>
+      <groundtruth_doneinfo_path>/workspace/mock_backtestsys/groundtruth/PubOrderDoneInfoLog_m1_20260312_TEST_CONTRACT.csv</groundtruth_doneinfo_path>
+      <groundtruth_executiondetail_path>/workspace/mock_backtestsys/groundtruth/PubExecutionDetailLog_m1_20260312_TEST_CONTRACT.csv</groundtruth_executiondetail_path>
+    </dataset>
+    <dataset>
+      <dataset_id>ds_02</dataset_id>
+      <market_data_path>/workspace/mock_backtestsys/market_data_ds_02.csv</market_data_path>
+      <order_file>/workspace/mock_backtestsys/replay_orders.csv</order_file>
+      <cancel_file>/workspace/mock_backtestsys/replay_cancels.csv</cancel_file>
+      <machine>m2</machine>
+      <contract>c2</contract>
+      <groundtruth_doneinfo_path>/workspace/mock_backtestsys/groundtruth/PubOrderDoneInfoLog_m1_20260312_TEST_CONTRACT.csv</groundtruth_doneinfo_path>
+      <groundtruth_executiondetail_path>/workspace/mock_backtestsys/groundtruth/PubExecutionDetailLog_m1_20260312_TEST_CONTRACT.csv</groundtruth_executiondetail_path>
+    </dataset>
+    <dataset>
+      <dataset_id>ds_03</dataset_id>
+      <market_data_path>/workspace/mock_backtestsys/market_data_ds_03.csv</market_data_path>
+      <order_file>/workspace/mock_backtestsys/replay_orders.csv</order_file>
+      <cancel_file>/workspace/mock_backtestsys/replay_cancels.csv</cancel_file>
+      <machine>m3</machine>
+      <contract>c3</contract>
+      <groundtruth_doneinfo_path>/workspace/mock_backtestsys/groundtruth/PubOrderDoneInfoLog_m1_20260312_TEST_CONTRACT.csv</groundtruth_doneinfo_path>
+      <groundtruth_executiondetail_path>/workspace/mock_backtestsys/groundtruth/PubExecutionDetailLog_m1_20260312_TEST_CONTRACT.csv</groundtruth_executiondetail_path>
+    </dataset>
+  </datasets>
+</staged_calibration>
