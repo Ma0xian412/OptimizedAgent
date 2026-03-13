@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "backtestsys-visualizer"
+version = "0.1.0"
+description = "BackTestSys staged calibration visualizer"
+requires-python = ">=3.10"
+dependencies = [
+    "optuna",
+    "pandas",
+    "plotly",
+    "streamlit",
+    "kaleido",
+]
+
+[project.scripts]
+backtestsys-visualizer = "backtestsys_visualizer.cli:main"

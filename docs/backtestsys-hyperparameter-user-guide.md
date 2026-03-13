@@ -245,3 +245,31 @@ python3 -m pip install optuna structlog
 4. `artifacts/results/` 中每个执行结果包含 4 张 CSV
 5. `ocp_data/trial_results/` 存在对应 trial 结果记录
 
+---
+
+## 12. 迭代结果可视化子项目
+
+已提供独立子项目：
+
+- `tools/backtestsys-visualizer`
+
+能力：
+
+- 可视化四个 `raw` 分项 loss
+- 可视化四个 `normalized` 分项 loss
+- 可视化总 loss 和 `best-so-far`
+- 展示迭代明细（含参数）
+- 支持跨 stage 汇总
+
+启动页面：
+
+```bash
+python3 -m backtestsys_visualizer app --runtime-root ./runtime
+```
+
+导出 HTML/PNG/CSV：
+
+```bash
+python3 -m backtestsys_visualizer export --runtime-root ./runtime
+```
+
