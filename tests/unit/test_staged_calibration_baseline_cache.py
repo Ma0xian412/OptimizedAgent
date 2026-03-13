@@ -63,7 +63,7 @@ def test_baseline_stage_uses_cross_run_cache(monkeypatch: object, tmp_path: Path
         return StageResult(
             best_value=1.0,
             best_params={},
-            best_attrs={"raw": {"curve": 2.0, "terminal": 3.0, "cancel": 4.0, "post": 5.0}},
+            best_attrs={"raw": {"curve": 2.0, "terminal": 3.0, "post": 5.0}},
         )
 
     monkeypatch.setattr(staged_calibration, "run_stage_for_progress", fake_run_stage_for_progress)
