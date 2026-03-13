@@ -20,14 +20,38 @@ from optimization_control_plane.adapters.backtestsys.staged_calibration_config_l
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True, help="Absolute path to staged calibration xml config")
+    parser.add_argument(
+        "--progress-interval-seconds",
+        type=float,
+        default=2.0,
+        help="Progress report interval in seconds (must be > 0)",
+    )
+    parser.add_argument(
+        "--progress-format",
+        choices=("text", "json"),
+        default="text",
+        help="Progress output format",
+    )
     args = parser.parse_args()
+    if args.progress_interval_seconds <= 0:
+        raise ValueError("--progress-interval-seconds must be > 0")
     config_path = Path(args.config)
     config = load_calibration_config(config_path)
     summary = calibration_config_summary(config, source=config_path)
     print("[iter_backtestsys] effective config summary:")
     print(json.dumps(summary, indent=2, ensure_ascii=False))
     print("[iter_backtestsys] staged calibration output:")
-    print(json.dumps(run_staged_calibration(config), indent=2, ensure_ascii=False))
+    print(
+        json.dumps(
+            run_staged_calibration(
+                config,
+                progress_interval_seconds=args.progress_interval_seconds,
+                progress_format=args.progress_format,
+            ),
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
 
 
 if __name__ == "__main__":

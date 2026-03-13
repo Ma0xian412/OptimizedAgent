@@ -89,6 +89,7 @@ class CalibrationConfig:
     delay_range: IntRange
     time_scale_lambda_range: FloatRange
     cancel_bias_k_range: FloatRange
+    max_in_flight_trials: int = 1
 
 
 class FixedBacktestSearchSpaceAdapter:
@@ -179,7 +180,7 @@ def build_settings(
         },
         "sampler": {"type": "random", "seed": 42},
         "pruner": {"type": "nop"},
-        "parallelism": {"max_in_flight_trials": 1},
+        "parallelism": {"max_in_flight_trials": config.max_in_flight_trials},
         "stop": {"max_trials": max_trials, "max_failures": config.max_failures},
     }
 

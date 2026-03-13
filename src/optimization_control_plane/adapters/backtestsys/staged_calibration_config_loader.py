@@ -33,6 +33,7 @@ def load_calibration_config(config_path: Path) -> CalibrationConfig:
         machine_delay_trials=_read_positive_int(root, "machine_delay_trials"),
         contract_core_trials=_read_positive_int(root, "contract_core_trials"),
         verify_trials=_read_positive_int(root, "verify_trials"),
+        max_in_flight_trials=_read_optional_positive_int(root, "max_in_flight_trials", default=1),
         default_resources=_read_default_resources(root),
         delay_range=_read_int_range(root, ("search_ranges", "delay")),
         time_scale_lambda_range=_read_float_range(root, ("search_ranges", "time_scale_lambda")),
@@ -57,6 +58,7 @@ def calibration_config_summary(config: CalibrationConfig, *, source: Path) -> di
             "verify": config.verify_trials,
             "max_failures": config.max_failures,
         },
+        "parallelism": {"max_in_flight_trials": config.max_in_flight_trials},
         "default_resources": dict(config.default_resources),
         "search_ranges": {
             "delay": {"low": config.delay_range.low, "high": config.delay_range.high},
@@ -178,6 +180,13 @@ def _read_node_text(node: ET.Element, field_name: str) -> str:
 def _read_positive_int(root: ET.Element, key: str) -> int:
     raw = _read_required_text(root, key, f"config.{key}")
     return _parse_positive_int(raw, f"config.{key}")
+
+
+def _read_optional_positive_int(root: ET.Element, key: str, *, default: int) -> int:
+    node = root.find(key)
+    if node is None:
+        return default
+    return _parse_positive_int(_read_node_text(node, f"config.{key}"), f"config.{key}")
 
 
 def _parse_positive_int(raw: str, field_name: str) -> int:

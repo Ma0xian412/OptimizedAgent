@@ -46,13 +46,17 @@ def _build_config(workspace_root: Path) -> CalibrationConfig:
 def test_baseline_stage_uses_cross_run_cache(monkeypatch: object, tmp_path: Path) -> None:
     call_count = {"value": 0}
 
-    def fake_run_stage(
+    def fake_run_stage_for_progress(
+        *,
         runtime_root: Path,
         stage_name: str,
         settings: dict[str, object],
         search_space: object,
+        progress_reporter: object,
+        progress_context: object,
+        progress_interval_seconds: float,
     ) -> StageResult:
-        del runtime_root, settings, search_space
+        del runtime_root, settings, search_space, progress_reporter, progress_context, progress_interval_seconds
         call_count["value"] += 1
         if stage_name != "baseline":
             raise AssertionError("unexpected stage name")
@@ -62,7 +66,7 @@ def test_baseline_stage_uses_cross_run_cache(monkeypatch: object, tmp_path: Path
             best_attrs={"raw": {"curve": 2.0, "terminal": 3.0, "cancel": 4.0, "post": 5.0}},
         )
 
-    monkeypatch.setattr(staged_calibration, "run_stage", fake_run_stage)
+    monkeypatch.setattr(staged_calibration, "run_stage_for_progress", fake_run_stage_for_progress)
     config = _build_config(tmp_path)
     dataset_inputs = {
         "ds_01": {

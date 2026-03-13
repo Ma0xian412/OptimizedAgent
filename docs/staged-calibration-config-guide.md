@@ -8,6 +8,18 @@
 python3 /workspace/iter_backtestsys.py --config /workspace/staged_calibration.config.xml
 ```
 
+可选进度参数：
+
+```bash
+python3 /workspace/iter_backtestsys.py \
+  --config /workspace/staged_calibration.config.xml \
+  --progress-interval-seconds 2 \
+  --progress-format text
+```
+
+- `--progress-interval-seconds`：进度心跳间隔（秒，必须 > 0）
+- `--progress-format`：`text` 或 `json`
+
 注意：
 
 - `--config` 必填。
@@ -44,8 +56,9 @@ python3 /workspace/iter_backtestsys.py --config /workspace/staged_calibration.co
 - `machine_delay_trials`
 - `contract_core_trials`
 - `verify_trials`
+- `max_in_flight_trials`（可选，默认 `1`）
 
-以上字段均为正整数。
+以上字段均为正整数。`max_in_flight_trials` 控制同一阶段内可并行执行的 run 数量。
 
 ### 3.3 资源配置
 
@@ -100,6 +113,7 @@ python3 /workspace/iter_backtestsys.py --config /workspace/staged_calibration.co
   <machine_delay_trials>12</machine_delay_trials>
   <contract_core_trials>12</contract_core_trials>
   <verify_trials>1</verify_trials>
+  <max_in_flight_trials>1</max_in_flight_trials>
 
   <default_resources>
     <cpu>1</cpu>
@@ -144,6 +158,10 @@ python3 /workspace/iter_backtestsys.py --config /workspace/staged_calibration.co
 
 1. `effective config summary`：生效配置摘要（用于核对）
 2. `staged calibration output`：本次运行结果（包含 `run_tag`、`runtime_root`、最优结果等）
+
+此外，运行期间会持续输出进度事件（stage started/progress/finished/failed），并落盘到：
+
+- `runtime_root/<run_tag>/progress.jsonl`
 
 ---
 
