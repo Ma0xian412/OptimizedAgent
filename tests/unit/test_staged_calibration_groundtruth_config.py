@@ -32,6 +32,7 @@ def _build_config(workspace_root: Path, datasets: tuple[DatasetDefinition, ...])
         delay_range=IntRange(low=0, high=500000),
         time_scale_lambda_range=FloatRange(low=-0.5, high=0.5),
         cancel_bias_k_range=FloatRange(low=-1.0, high=1.0),
+        max_in_flight_trials=3,
     )
 
 
@@ -70,6 +71,7 @@ def test_build_settings_includes_dataset_groundtruth_for_all_datasets(tmp_path: 
     )
 
     groundtruth = settings["objective_config"]["groundtruth"]
+    assert settings["parallelism"]["max_in_flight_trials"] == 3
     assert groundtruth["doneinfo_path"] == str(datasets[0].groundtruth_doneinfo_path)
     assert groundtruth["executiondetail_path"] == str(datasets[0].groundtruth_executiondetail_path)
     assert groundtruth["datasets"] == {

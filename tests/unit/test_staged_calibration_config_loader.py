@@ -27,6 +27,7 @@ def _base_xml(tmp_path: Path, market_path: str) -> str:
   <machine_delay_trials>5</machine_delay_trials>
   <contract_core_trials>6</contract_core_trials>
   <verify_trials>1</verify_trials>
+  <max_in_flight_trials>3</max_in_flight_trials>
   <default_resources>
     <cpu>1</cpu>
     <max_runtime_seconds>60</max_runtime_seconds>
@@ -71,7 +72,9 @@ def test_load_calibration_config_reads_xml_and_builds_summary(tmp_path: Path) ->
     assert config.datasets[0].dataset_id == "ds_01"
     assert config.delay_range.low == 0
     assert config.delay_range.high == 500000
+    assert config.max_in_flight_trials == 3
     assert summary["dataset_count"] == 1
+    assert summary["parallelism"]["max_in_flight_trials"] == 3
     assert summary["search_ranges"]["cancel_bias_k"]["high"] == 1.0
 
 
@@ -90,3 +93,14 @@ def test_load_calibration_config_requires_absolute_config_path(tmp_path: Path, m
 
     with pytest.raises(ValueError, match="--config must be an absolute path"):
         load_calibration_config(Path("staged_config.xml"))
+
+
+def test_load_calibration_config_parallelism_defaults_to_one(tmp_path: Path) -> None:
+    config_path = tmp_path / "staged_config.xml"
+    xml = _base_xml(tmp_path, str(tmp_path / "inputs" / "market.csv")).replace(
+        "  <max_in_flight_trials>3</max_in_flight_trials>\n", ""
+    )
+    _write_config(config_path, xml)
+
+    config = load_calibration_config(config_path)
+    assert config.max_in_flight_trials == 1

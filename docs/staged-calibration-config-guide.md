@@ -56,8 +56,9 @@ python3 /workspace/iter_backtestsys.py \
 - `machine_delay_trials`
 - `contract_core_trials`
 - `verify_trials`
+- `max_in_flight_trials`（可选，默认 `1`）
 
-以上字段均为正整数。
+以上字段均为正整数。`max_in_flight_trials` 控制同一阶段内可并行执行的 run 数量。
 
 ### 3.3 资源配置
 
@@ -112,6 +113,7 @@ python3 /workspace/iter_backtestsys.py \
   <machine_delay_trials>12</machine_delay_trials>
   <contract_core_trials>12</contract_core_trials>
   <verify_trials>1</verify_trials>
+  <max_in_flight_trials>1</max_in_flight_trials>
 
   <default_resources>
     <cpu>1</cpu>
