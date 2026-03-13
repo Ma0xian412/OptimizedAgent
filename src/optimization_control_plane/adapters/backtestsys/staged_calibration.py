@@ -23,9 +23,6 @@ from optimization_control_plane.adapters.backtestsys.staged_calibration_support 
     validate_required_paths,
 )
 
-_DELAY_RANGE = {"low": 0, "high": 500000}
-_LAMBDA_RANGE = {"low": -0.5, "high": 0.5}
-_CANCEL_BIAS_RANGE = {"low": -1.0, "high": 1.0}
 _BASELINE_CACHE_VERSION = 1
 _BASELINE_CACHE_SPEC_ID = "__baseline_cache_key__"
 _BASELINE_CACHE_OUTPUT_ROOT = "__baseline_cache_output_root__"
@@ -34,14 +31,12 @@ _BASELINE_CACHE_OUTPUT_ROOT = "__baseline_cache_output_root__"
 def run_staged_calibration(config: CalibrationConfig) -> dict[str, object]:
     validate_required_paths(config)
     run_tag = dt.datetime.now(dt.UTC).strftime("iter_backtestsys_%Y%m%d_%H%M%S")
-    runtime_root = config.workspace_root / "runtime" / run_tag
+    runtime_root = config.runtime_root / run_tag
     runtime_root.mkdir(parents=True, exist_ok=True)
     dataset_inputs = build_dataset_inputs(config)
     defaults = read_default_params(config.base_config_path)
     baseline_raw = _run_baseline_stage(config, runtime_root, run_tag, dataset_inputs, defaults)
-    machine_delay_map = _run_machine_delay_stage(
-        config, runtime_root, run_tag, dataset_inputs, defaults, baseline_raw
-    )
+    machine_delay_map = _run_machine_delay_stage(config, runtime_root, run_tag, dataset_inputs, defaults, baseline_raw)
     contract_core_map = _run_contract_core_stage(
         config, runtime_root, run_tag, dataset_inputs, baseline_raw, machine_delay_map
     )
@@ -125,7 +120,12 @@ def _run_machine_delay_stage(
             dataset_ids=dataset_ids,
             baseline_raw=baseline_raw,
             max_trials=config.machine_delay_trials,
-            backtest_search_space={"delay": dict(_DELAY_RANGE)},
+            backtest_search_space={
+                "delay": {
+                    "low": config.delay_range.low,
+                    "high": config.delay_range.high,
+                }
+            },
             backtest_fixed_params={
                 "time_scale_lambda": defaults.time_scale_lambda,
                 "cancel_bias_k": defaults.cancel_bias_k,
@@ -161,8 +161,14 @@ def _run_contract_core_stage(
             baseline_raw=baseline_raw,
             max_trials=config.contract_core_trials,
             backtest_search_space={
-                "time_scale_lambda": dict(_LAMBDA_RANGE),
-                "cancel_bias_k": dict(_CANCEL_BIAS_RANGE),
+                "time_scale_lambda": {
+                    "low": config.time_scale_lambda_range.low,
+                    "high": config.time_scale_lambda_range.high,
+                },
+                "cancel_bias_k": {
+                    "low": config.cancel_bias_k_range.low,
+                    "high": config.cancel_bias_k_range.high,
+                },
             },
             backtest_fixed_params={"delay": machine_delay_map[machine]},
             param_binding=None,
