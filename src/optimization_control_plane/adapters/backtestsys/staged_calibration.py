@@ -4,7 +4,7 @@ import datetime as dt
 import json
 from pathlib import Path
 
-from optimization_control_plane.adapters.backtestsys import BackTestCoreParamsSearchSpaceAdapter, BackTestDelaySearchSpaceAdapter
+from optimization_control_plane.adapters.backtestsys import BackTestCoreParamsSearchSpaceAdapter
 from optimization_control_plane.adapters.backtestsys.staged_calibration_observability import (
     StageProgressContext,
     StagedCalibrationProgressReporter,
@@ -42,32 +42,33 @@ def run_staged_calibration(
     runtime_root = config.runtime_root / run_tag
     runtime_root.mkdir(parents=True, exist_ok=True)
     reporter = StagedCalibrationProgressReporter(runtime_root, run_tag, output_format=progress_format)
-    reporter.run_started(unit_total=4, dataset_count=len(config.datasets))
+    reporter.run_started(unit_total=3, dataset_count=len(config.datasets))
     dataset_inputs = build_dataset_inputs(config)
     defaults = read_default_params(config.base_config_path)
+    machine_delay_map = _resolve_machine_delay_map(config)
     baseline_raw = run_observed_block(
         reporter,
-        StageProgressContext("baseline", 1, 4, config.baseline_trials),
+        StageProgressContext("baseline", 1, 3, config.baseline_trials),
         lambda: _run_baseline_stage(config, runtime_root, run_tag, dataset_inputs, defaults, reporter, progress_interval_seconds),
-    )
-    machine_delay_map = run_observed_block(
-        reporter,
-        StageProgressContext("machine_delay", 2, 4, None),
-        lambda: _run_machine_delay_stage(
-            config, runtime_root, run_tag, dataset_inputs, defaults, baseline_raw, reporter, progress_interval_seconds
-        ),
     )
     contract_core_map = run_observed_block(
         reporter,
-        StageProgressContext("contract_core", 3, 4, None),
-        lambda: _run_contract_core_stage(
-            config, runtime_root, run_tag, dataset_inputs, baseline_raw, machine_delay_map, reporter, progress_interval_seconds
+        StageProgressContext("contract", 2, 3, None),
+        lambda: _run_contract_stage(
+            config,
+            runtime_root,
+            run_tag,
+            dataset_inputs,
+            baseline_raw,
+            machine_delay_map,
+            reporter,
+            progress_interval_seconds,
         ),
     )
-    final_result = run_observed_block(
+    verify_result = run_observed_block(
         reporter,
-        StageProgressContext("final_verify", 4, 4, config.verify_trials),
-        lambda: _run_final_verify_stage(
+        StageProgressContext("verify", 3, 3, config.verify_trials),
+        lambda: _run_verify_stage(
             config,
             runtime_root,
             run_tag,
@@ -87,12 +88,14 @@ def run_staged_calibration(
         "baseline_raw": baseline_raw,
         "machine_delay_map": machine_delay_map,
         "contract_core_map": contract_core_map,
-        "final_best_value": final_result.best_value,
-        "final_raw": final_result.best_attrs.get("raw"),
+        "verify_best_value": verify_result.best_value,
+        "verify_raw": verify_result.best_attrs.get("raw"),
     }
     (runtime_root / "calibration_output.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    reporter.run_finished(final_best_value=final_result.best_value, runtime_root=runtime_root)
+    reporter.run_finished(final_best_value=verify_result.best_value, runtime_root=runtime_root)
     return payload
+
+
 def _run_baseline_stage(
     config: CalibrationConfig,
     runtime_root: Path,
@@ -140,50 +143,7 @@ def _run_baseline_stage(
     return baseline_raw
 
 
-def _run_machine_delay_stage(
-    config: CalibrationConfig,
-    runtime_root: Path,
-    run_tag: str,
-    dataset_inputs: dict[str, dict[str, str]],
-    defaults,
-    baseline_raw: dict[str, float],
-    reporter: StagedCalibrationProgressReporter | None = None,
-    progress_interval_seconds: float = 2.0,
-) -> dict[str, int]:
-    grouped = group_dataset_ids(config.datasets, key="machine")
-    total = len(grouped)
-    machine_delay_map: dict[str, int] = {}
-    for index, (machine, dataset_ids) in enumerate(sorted(grouped.items()), start=1):
-        settings = build_settings(
-            config,
-            runtime_root,
-            spec_id=f"{run_tag}_machine_delay_{machine}",
-            dataset_inputs=dataset_inputs,
-            dataset_ids=dataset_ids,
-            baseline_raw=baseline_raw,
-            max_trials=config.machine_delay_trials,
-            backtest_search_space={"delay": {"low": config.delay_range.low, "high": config.delay_range.high}},
-            backtest_fixed_params={"time_scale_lambda": defaults.time_scale_lambda, "cancel_bias_k": defaults.cancel_bias_k},
-            param_binding=None,
-        )
-        stage_name = f"machine_delay_{machine}"
-        stage_result = run_stage_for_progress(
-            runtime_root=runtime_root,
-            stage_name=stage_name,
-            settings=settings,
-            search_space=BackTestDelaySearchSpaceAdapter(),
-            progress_reporter=reporter,
-            progress_context=StageProgressContext(stage_name, index, total, config.machine_delay_trials),
-            progress_interval_seconds=progress_interval_seconds,
-        )
-        delay = stage_result.best_params.get("delay")
-        if not isinstance(delay, int) or isinstance(delay, bool):
-            raise ValueError(f"best delay for machine={machine} must be int")
-        machine_delay_map[machine] = delay
-    return machine_delay_map
-
-
-def _run_contract_core_stage(
+def _run_contract_stage(
     config: CalibrationConfig,
     runtime_root: Path,
     run_tag: str,
@@ -201,11 +161,11 @@ def _run_contract_core_stage(
         settings = build_settings(
             config,
             runtime_root,
-            spec_id=f"{run_tag}_contract_core_{contract}",
+            spec_id=f"{run_tag}_contract_{contract}",
             dataset_inputs=dataset_inputs,
             dataset_ids=dataset_ids,
             baseline_raw=baseline_raw,
-            max_trials=config.contract_core_trials,
+            max_trials=config.contract_trials,
             backtest_search_space={
                 "time_scale_lambda": {"low": config.time_scale_lambda_range.low, "high": config.time_scale_lambda_range.high},
                 "cancel_bias_k": {"low": config.cancel_bias_k_range.low, "high": config.cancel_bias_k_range.high},
@@ -213,14 +173,14 @@ def _run_contract_core_stage(
             backtest_fixed_params={"delay": machine_delay_map[machine]},
             param_binding=None,
         )
-        stage_name = f"contract_core_{contract}"
+        stage_name = f"contract_{contract}"
         stage_result = run_stage_for_progress(
             runtime_root=runtime_root,
             stage_name=stage_name,
             settings=settings,
             search_space=BackTestCoreParamsSearchSpaceAdapter(),
             progress_reporter=reporter,
-            progress_context=StageProgressContext(stage_name, index, total, config.contract_core_trials),
+            progress_context=StageProgressContext(stage_name, index, total, config.contract_trials),
             progress_interval_seconds=progress_interval_seconds,
         )
         contract_core_map[contract] = {
@@ -230,7 +190,7 @@ def _run_contract_core_stage(
     return contract_core_map
 
 
-def _run_final_verify_stage(
+def _run_verify_stage(
     config: CalibrationConfig,
     runtime_root: Path,
     run_tag: str,
@@ -245,7 +205,7 @@ def _run_final_verify_stage(
     settings = build_settings(
         config,
         runtime_root,
-        spec_id=f"{run_tag}_final_verify",
+        spec_id=f"{run_tag}_verify",
         dataset_inputs=dataset_inputs,
         dataset_ids=[item.dataset_id for item in config.datasets],
         baseline_raw=baseline_raw,
@@ -262,13 +222,27 @@ def _run_final_verify_stage(
     }
     return run_stage_for_progress(
         runtime_root=runtime_root,
-        stage_name="final_verify",
+        stage_name="verify",
         settings=settings,
         search_space=FixedBacktestSearchSpaceAdapter(fixed_params),
         progress_reporter=reporter,
-        progress_context=StageProgressContext("final_verify", 1, 1, config.verify_trials),
+        progress_context=StageProgressContext("verify", 1, 1, config.verify_trials),
         progress_interval_seconds=progress_interval_seconds,
     )
+
+
+def _resolve_machine_delay_map(config: CalibrationConfig) -> dict[str, int]:
+    required_machines = {dataset.machine for dataset in config.datasets}
+    configured_machines = set(config.machine_delay_map.keys())
+    missing = sorted(required_machines.difference(configured_machines))
+    if missing:
+        raise ValueError(f"machine_delay_map missing machines: {', '.join(missing)}")
+    delay_map: dict[str, int] = {}
+    for machine, delay in config.machine_delay_map.items():
+        if not isinstance(delay, int) or isinstance(delay, bool) or delay < 0:
+            raise ValueError(f"machine_delay_map[{machine}] must be a non-negative int")
+        delay_map[machine] = delay
+    return delay_map
 
 
 _build_baseline_cache_path = build_baseline_cache_path

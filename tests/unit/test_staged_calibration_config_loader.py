@@ -24,19 +24,20 @@ def _base_xml(tmp_path: Path, market_path: str) -> str:
   <python_executable>/usr/bin/python3</python_executable>
   <max_failures>2</max_failures>
   <baseline_trials>1</baseline_trials>
-  <machine_delay_trials>5</machine_delay_trials>
-  <contract_core_trials>6</contract_core_trials>
+  <contract_trials>6</contract_trials>
   <verify_trials>1</verify_trials>
   <max_in_flight_trials>3</max_in_flight_trials>
+  <machine_delay_map>
+    <item>
+      <machine>m1</machine>
+      <delay>100</delay>
+    </item>
+  </machine_delay_map>
   <default_resources>
     <cpu>1</cpu>
     <max_runtime_seconds>60</max_runtime_seconds>
   </default_resources>
   <search_ranges>
-    <delay>
-      <low>0</low>
-      <high>500000</high>
-    </delay>
     <time_scale_lambda>
       <low>-0.5</low>
       <high>0.5</high>
@@ -70,11 +71,11 @@ def test_load_calibration_config_reads_xml_and_builds_summary(tmp_path: Path) ->
     summary = calibration_config_summary(config, source=config_path)
 
     assert config.datasets[0].dataset_id == "ds_01"
-    assert config.delay_range.low == 0
-    assert config.delay_range.high == 500000
+    assert config.machine_delay_map == {"m1": 100}
     assert config.max_in_flight_trials == 3
     assert summary["dataset_count"] == 1
     assert summary["parallelism"]["max_in_flight_trials"] == 3
+    assert summary["machine_delay_map"] == {"m1": 100}
     assert summary["search_ranges"]["cancel_bias_k"]["high"] == 1.0
 
 
@@ -104,3 +105,14 @@ def test_load_calibration_config_parallelism_defaults_to_one(tmp_path: Path) -> 
 
     config = load_calibration_config(config_path)
     assert config.max_in_flight_trials == 1
+
+
+def test_load_calibration_config_requires_machine_delay_for_all_dataset_machines(tmp_path: Path) -> None:
+    config_path = tmp_path / "staged_config.xml"
+    xml = _base_xml(tmp_path, str(tmp_path / "inputs" / "market.csv")).replace(
+        "<machine>m1</machine>\n      <delay>100</delay>", "<machine>m2</machine>\n      <delay>100</delay>"
+    )
+    _write_config(config_path, xml)
+
+    with pytest.raises(ValueError, match="config.machine_delay_map missing machines: m1"):
+        load_calibration_config(config_path)

@@ -7,6 +7,8 @@ COMPONENT_NAMES = ("curve", "terminal", "cancel", "post")
 
 _STAGE_PREFIX_RANK = {
     "baseline": 0,
+    "contract_": 1,
+    "verify": 2,
     "machine_delay_": 1,
     "contract_core_": 2,
     "final_verify": 3,

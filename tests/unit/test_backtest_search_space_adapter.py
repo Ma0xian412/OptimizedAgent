@@ -4,7 +4,6 @@ import pytest
 
 from optimization_control_plane.adapters.backtestsys import (
     BackTestCoreParamsSearchSpaceAdapter,
-    BackTestDelaySearchSpaceAdapter,
 )
 from tests.conftest import make_spec
 
@@ -46,59 +45,6 @@ def _base_objective_config() -> dict[str, object]:
         "sampler": {"type": "random", "seed": 42},
         "pruner": {"type": "nop"},
     }
-
-
-class TestBackTestDelaySearchSpaceAdapter:
-    def test_sample_delay_with_fixed_core_params(self) -> None:
-        adapter = BackTestDelaySearchSpaceAdapter()
-        objective_config = _base_objective_config()
-        objective_config["backtest_search_space"] = {"delay": {"low": 0, "high": 10}}
-        objective_config["backtest_fixed_params"] = {
-            "time_scale_lambda": 0.5,
-            "cancel_bias_k": -0.25,
-        }
-        spec = make_spec(objective_config=objective_config)
-        ctx = RecordingCtx()
-
-        sampled = adapter.sample(ctx, spec)
-
-        assert sampled == {
-            "time_scale_lambda": 0.5,
-            "cancel_bias_k": -0.25,
-            "delay_in": 10,
-            "delay_out": 10,
-        }
-        assert ctx.float_calls == []
-        assert ctx.int_calls == [("delay", 0, 10)]
-        assert ctx.attrs["backtest_config_patch"] == sampled
-
-    def test_missing_fixed_params_raises(self) -> None:
-        adapter = BackTestDelaySearchSpaceAdapter()
-        objective_config = _base_objective_config()
-        objective_config["backtest_search_space"] = {"delay": {"low": 0, "high": 10}}
-        spec = make_spec(objective_config=objective_config)
-
-        with pytest.raises(
-            ValueError,
-            match="spec.objective_config.backtest_fixed_params must be a dict",
-        ):
-            adapter.sample(RecordingCtx(), spec)
-
-    def test_invalid_delay_range_type_raises(self) -> None:
-        adapter = BackTestDelaySearchSpaceAdapter()
-        objective_config = _base_objective_config()
-        objective_config["backtest_search_space"] = {"delay": {"low": 0.0, "high": 10}}
-        objective_config["backtest_fixed_params"] = {
-            "time_scale_lambda": 0.5,
-            "cancel_bias_k": -0.25,
-        }
-        spec = make_spec(objective_config=objective_config)
-
-        with pytest.raises(
-            ValueError,
-            match="backtest_search_space.delay low/high must be int",
-        ):
-            adapter.sample(RecordingCtx(), spec)
 
 
 class TestBackTestCoreParamsSearchSpaceAdapter:

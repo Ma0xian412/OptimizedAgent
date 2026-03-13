@@ -104,17 +104,9 @@ python3 -m pip install optuna structlog pytest
 
 你有两种方式：
 
-### 方式 A：直接使用内置二选一适配器
+### 方式 A：直接使用内置适配器
 
-适配器 1：`BackTestDelaySearchSpaceAdapter`
-
-- 仅采样 `delay`（一个参数）
-- 输出时自动映射为 `delay_in = delay_out = delay`
-- 需在 `objective_config.backtest_fixed_params` 固定：
-  - `time_scale_lambda`
-  - `cancel_bias_k`
-
-适配器 2：`BackTestCoreParamsSearchSpaceAdapter`
+适配器：`BackTestCoreParamsSearchSpaceAdapter`
 
 - 仅采样：
   - `time_scale_lambda`

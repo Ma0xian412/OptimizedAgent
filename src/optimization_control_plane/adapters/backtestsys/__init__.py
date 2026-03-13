@@ -21,7 +21,6 @@ from optimization_control_plane.adapters.backtestsys.run_spec_builder_adapter im
 )
 from optimization_control_plane.adapters.backtestsys.search_space_adapter import (
     BackTestCoreParamsSearchSpaceAdapter,
-    BackTestDelaySearchSpaceAdapter,
 )
 from optimization_control_plane.adapters.backtestsys.trial_result_aggregator_adapter import (
     BackTestTrialResultAggregatorAdapter,
@@ -35,7 +34,6 @@ __all__ = [
     "BackTestRunKeyBuilderAdapter",
     "BackTestRunResultLoaderAdapter",
     "BackTestRunSpecBuilderAdapter",
-    "BackTestDelaySearchSpaceAdapter",
     "BackTestCoreParamsSearchSpaceAdapter",
     "BackTestTrialResultAggregatorAdapter",
 ]

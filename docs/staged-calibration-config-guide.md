@@ -1,6 +1,6 @@
 # Staged Calibration XML 配置使用指南
 
-本文档说明如何使用 `iter_backtestsys.py --config <绝对路径>` 运行 staged calibration。
+本文档说明如何使用 `iter_backtestsys.py --config <绝对路径>` 运行 staged calibration（`baseline -> contract -> verify` 三阶段）。
 
 ## 1. 运行入口
 
@@ -53,14 +53,25 @@ python3 /workspace/iter_backtestsys.py \
 
 - `max_failures`
 - `baseline_trials`
-- `machine_delay_trials`
-- `contract_core_trials`
+- `contract_trials`
 - `verify_trials`
 - `max_in_flight_trials`（可选，默认 `1`）
 
 以上字段均为正整数。`max_in_flight_trials` 控制同一阶段内可并行执行的 run 数量。
 
-### 3.3 资源配置
+### 3.3 machine-delay 映射配置
+
+位于 `machine_delay_map`，每个 `item` 必须包含：
+
+- `machine`：机器名（字符串）
+- `delay`：该机器固定 delay（非负整数）
+
+要求：
+
+- 至少包含 1 条映射
+- 必须覆盖 `datasets` 中出现的所有 `machine`
+
+### 3.4 资源配置
 
 位于 `default_resources`，支持键：
 
@@ -72,17 +83,16 @@ python3 /workspace/iter_backtestsys.py \
 
 值均为正整数。
 
-### 3.4 搜索空间
+### 3.5 搜索空间
 
 位于 `search_ranges`：
 
-- `delay.low / delay.high`（int）
 - `time_scale_lambda.low / time_scale_lambda.high`（float）
 - `cancel_bias_k.low / cancel_bias_k.high`（float）
 
 要求 `low <= high`。
 
-### 3.5 数据集（每个 dataset 独立配置）
+### 3.6 数据集（每个 dataset 独立配置）
 
 位于 `datasets/dataset`，每个 dataset 必须包含：
 
@@ -110,10 +120,15 @@ python3 /workspace/iter_backtestsys.py \
 
   <max_failures>2</max_failures>
   <baseline_trials>1</baseline_trials>
-  <machine_delay_trials>12</machine_delay_trials>
-  <contract_core_trials>12</contract_core_trials>
+  <contract_trials>12</contract_trials>
   <verify_trials>1</verify_trials>
   <max_in_flight_trials>1</max_in_flight_trials>
+  <machine_delay_map>
+    <item>
+      <machine>m1</machine>
+      <delay>10</delay>
+    </item>
+  </machine_delay_map>
 
   <default_resources>
     <cpu>1</cpu>
@@ -121,10 +136,6 @@ python3 /workspace/iter_backtestsys.py \
   </default_resources>
 
   <search_ranges>
-    <delay>
-      <low>0</low>
-      <high>500000</high>
-    </delay>
     <time_scale_lambda>
       <low>-0.5</low>
       <high>0.5</high>

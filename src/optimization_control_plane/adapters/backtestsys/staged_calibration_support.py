@@ -46,12 +46,6 @@ class DatasetDefinition:
 
 
 @dataclass(frozen=True)
-class IntRange:
-    low: int
-    high: int
-
-
-@dataclass(frozen=True)
 class FloatRange:
     low: float
     high: float
@@ -82,11 +76,10 @@ class CalibrationConfig:
     datasets: tuple[DatasetDefinition, ...]
     max_failures: int
     baseline_trials: int
-    machine_delay_trials: int
-    contract_core_trials: int
+    contract_trials: int
     verify_trials: int
+    machine_delay_map: dict[str, int]
     default_resources: dict[str, int]
-    delay_range: IntRange
     time_scale_lambda_range: FloatRange
     cancel_bias_k_range: FloatRange
     max_in_flight_trials: int = 1
