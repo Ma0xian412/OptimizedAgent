@@ -6,8 +6,9 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from backtestsys_visualizer.charts import build_default_figures
+from backtestsys_visualizer.charts import build_default_figures, build_run_gt_metric_figure
 from backtestsys_visualizer.loader import discover_run_dirs, load_trial_points, to_dataframe
+from backtestsys_visualizer.run_gt_analysis import load_run_gt_trial_dataframe
 
 _ENV_RUNTIME_ROOT = "BACKTESTSYS_VIS_RUNTIME_ROOT"
 _ENV_RUN_TAG = "BACKTESTSYS_VIS_RUN_TAG"
@@ -35,6 +36,7 @@ def run() -> None:
     _render_overview(df)
     _render_figures(df)
     _render_table(df)
+    _render_run_gt_section(run_root=selected_run_dir, selected_stages=selected_stages)
 
 
 def _read_runtime_root_from_sidebar() -> Path:
@@ -116,6 +118,55 @@ def _render_table(df: pd.DataFrame) -> None:
     ]
     table_df = df[table_cols].sort_values("global_iteration")
     st.dataframe(table_df, use_container_width=True)
+
+
+def _render_run_gt_section(*, run_root: Path, selected_stages: set[str]) -> None:
+    st.subheader("RunResult vs GT（随迭代变化）")
+    run_gt_df = load_run_gt_trial_dataframe(run_root=run_root, selected_stages=selected_stages)
+    if run_gt_df.empty:
+        st.info("当前 run/stage 没有可用的 RunResult vs GT 对比数据。")
+        return
+    metric_options = {
+        "state_match_rate": "DoneState 一致率",
+        "done_time_mae": "DoneTime 绝对误差均值",
+        "sim_fill_ratio": "Sim 成交率均值",
+        "gt_fill_ratio": "GT 成交率均值",
+        "fill_gap_ratio": "成交率差值均值",
+        "terminal_raw_from_tables": "Terminal 差异（表重算）",
+        "cancel_state_match_rate": "撤单成功一致率",
+        "post_cancel_gap": "撤后成交差异",
+    }
+    metric_key = st.selectbox(
+        "选择对比指标",
+        options=list(metric_options.keys()),
+        format_func=lambda key: metric_options[key],
+        index=0,
+    )
+    figure = build_run_gt_metric_figure(
+        run_gt_df,
+        metric=metric_key,
+        title=f"{metric_options[metric_key]} 迭代曲线",
+    )
+    st.plotly_chart(figure, use_container_width=True)
+    table_cols = [
+        "global_iteration",
+        "stage",
+        "stage_iteration",
+        "trial_id",
+        "dataset_count",
+        "missing_dataset_count",
+        "order_count",
+        "cancel_order_count",
+        "state_match_rate",
+        "done_time_mae",
+        "sim_fill_ratio",
+        "gt_fill_ratio",
+        "fill_gap_ratio",
+        "terminal_raw_from_tables",
+        "cancel_state_match_rate",
+        "post_cancel_gap",
+    ]
+    st.dataframe(run_gt_df[table_cols].sort_values("global_iteration"), use_container_width=True)
 
 
 if __name__ == "__main__":

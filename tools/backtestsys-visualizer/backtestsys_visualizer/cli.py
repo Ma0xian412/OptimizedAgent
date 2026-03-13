@@ -7,8 +7,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from backtestsys_visualizer.charts import build_default_figures, export_figures
+from backtestsys_visualizer.charts import (
+    build_default_figures,
+    build_run_gt_metric_figure,
+    export_figures,
+)
 from backtestsys_visualizer.loader import discover_run_dirs, load_trial_points, to_dataframe
+from backtestsys_visualizer.run_gt_analysis import load_run_gt_trial_dataframe
 
 _ENV_RUNTIME_ROOT = "BACKTESTSYS_VIS_RUNTIME_ROOT"
 _ENV_RUN_TAG = "BACKTESTSYS_VIS_RUN_TAG"
@@ -83,6 +88,7 @@ def _run_export_command(args: argparse.Namespace) -> None:
     csv_path = output_dir / "trial_points.csv"
     df.to_csv(csv_path, index=False)
     exported_files.append(csv_path)
+    exported_files.extend(_export_run_gt_assets(run_dir=run_dir, output_dir=output_dir, selected_stages=selected_stages))
     summary_path = output_dir / "summary.json"
     summary_path.write_text(
         json.dumps(
@@ -98,6 +104,32 @@ def _run_export_command(args: argparse.Namespace) -> None:
         encoding="utf-8",
     )
     print(f"导出完成: {summary_path}")
+
+
+def _export_run_gt_assets(
+    *,
+    run_dir: Path,
+    output_dir: Path,
+    selected_stages: set[str] | None,
+) -> list[Path]:
+    run_gt_df = load_run_gt_trial_dataframe(run_root=run_dir, selected_stages=selected_stages)
+    if run_gt_df.empty:
+        return []
+    exported: list[Path] = []
+    csv_path = output_dir / "run_gt_metrics.csv"
+    run_gt_df.to_csv(csv_path, index=False)
+    exported.append(csv_path)
+    metric_title = {
+        "state_match_rate": "DoneState 一致率",
+        "done_time_mae": "DoneTime 绝对误差均值",
+        "fill_gap_ratio": "成交率差值均值",
+    }
+    figures = {
+        f"run_gt_{metric}": build_run_gt_metric_figure(run_gt_df, metric=metric, title=f"{title} 迭代曲线")
+        for metric, title in metric_title.items()
+    }
+    exported.extend(export_figures(figures=figures, output_dir=output_dir))
+    return exported
 
 
 def _resolve_run_dir(*, runtime_root: Path, run_tag: str | None) -> Path:

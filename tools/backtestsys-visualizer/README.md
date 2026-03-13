@@ -7,6 +7,7 @@
 - 总 loss（`value`）与 `best-so-far`
 - 迭代结果表（含参数）
 - 跨 stage 汇总查看
+- `RunResult vs GT` 对比指标随迭代变化（done state 一致率、done time 误差、成交率差等）
 
 数据源同时支持：
 
@@ -52,6 +53,10 @@ python3 -m backtestsys_visualizer export \
 - `raw_components.html/.png`
 - `normalized_components.html/.png`
 - `trial_points.csv`
+- `run_gt_metrics.csv`
+- `run_gt_state_match_rate.html/.png`
+- `run_gt_done_time_mae.html/.png`
+- `run_gt_fill_gap_ratio.html/.png`
 - `summary.json`
 
 只导出指定 stage：

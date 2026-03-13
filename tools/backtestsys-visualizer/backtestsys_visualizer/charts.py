@@ -21,6 +21,27 @@ def build_default_figures(df: pd.DataFrame) -> dict[str, go.Figure]:
     }
 
 
+def build_run_gt_metric_figure(df: pd.DataFrame, *, metric: str, title: str) -> go.Figure:
+    if df.empty:
+        return _empty_figure("暂无数据")
+    if metric not in df.columns:
+        return _empty_figure(f"缺少字段: {metric}")
+    data = df.dropna(subset=[metric]).sort_values("global_iteration")
+    if data.empty:
+        return _empty_figure("当前指标无有效数据")
+    fig = px.line(
+        data,
+        x="global_iteration",
+        y=metric,
+        color="stage",
+        markers=True,
+        title=title,
+        hover_data=["trial_id", "stage_iteration"],
+    )
+    fig.update_layout(xaxis_title="全局迭代序号", yaxis_title=metric)
+    return fig
+
+
 def build_total_loss_figure(df: pd.DataFrame) -> go.Figure:
     if df.empty:
         return _empty_figure("暂无数据")
