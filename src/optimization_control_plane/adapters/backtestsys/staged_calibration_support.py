@@ -225,8 +225,12 @@ def run_stage(runtime_root: Path, stage_name: str, settings: dict[str, Any], sea
     stage_root = runtime_root / "stages" / stage_name
     stage_root.mkdir(parents=True, exist_ok=True)
     storage_dsn = f"sqlite:///{(stage_root / 'study.db').resolve()}"
+    shared_cache_root = runtime_root.parent / "cache" / "ocp_shared"
     orchestrator = _build_orchestrator(
-        storage_dsn=storage_dsn, data_root=stage_root / "ocp_data", search_space=search_space
+        storage_dsn=storage_dsn,
+        cache_root=shared_cache_root,
+        result_root=stage_root / "ocp_data",
+        search_space=search_space,
     )
     orchestrator.start(settings=settings)
     best_trial = _load_best_trial(storage_dsn)
@@ -255,7 +259,13 @@ def _read_xml_text(root: ET.Element, path: tuple[str, ...]) -> str:
     return node.text.strip()
 
 
-def _build_orchestrator(*, storage_dsn: str, data_root: Path, search_space: object) -> TrialOrchestrator:
+def _build_orchestrator(
+    *,
+    storage_dsn: str,
+    cache_root: Path,
+    result_root: Path,
+    search_space: object,
+) -> TrialOrchestrator:
     objective_def = ObjectiveDefinition(
         search_space=search_space,
         dataset_enumerator=BackTestDatasetEnumeratorAdapter(),
@@ -274,9 +284,9 @@ def _build_orchestrator(*, storage_dsn: str, data_root: Path, search_space: obje
         parallelism_policy=AsyncFillParallelismPolicy(),
         dispatch_policy=SubmitNowDispatchPolicy(),
         run_result_loader=BackTestRunResultLoaderAdapter(),
-        run_cache=FileRunCache(data_root),
-        objective_cache=FileObjectiveCache(data_root),
-        result_store=FileResultStore(data_root),
+        run_cache=FileRunCache(cache_root),
+        objective_cache=FileObjectiveCache(cache_root),
+        result_store=FileResultStore(result_root),
     )
 
 
