@@ -8,10 +8,23 @@
 
   <max_failures>2</max_failures>
   <baseline_trials>1</baseline_trials>
-  <machine_delay_trials>12</machine_delay_trials>
-  <contract_core_trials>12</contract_core_trials>
+  <contract_trials>12</contract_trials>
   <verify_trials>1</verify_trials>
   <max_in_flight_trials>1</max_in_flight_trials>
+  <machine_delay_map>
+    <item>
+      <machine>m1</machine>
+      <delay>10</delay>
+    </item>
+    <item>
+      <machine>m2</machine>
+      <delay>20</delay>
+    </item>
+    <item>
+      <machine>m3</machine>
+      <delay>30</delay>
+    </item>
+  </machine_delay_map>
 
   <default_resources>
     <cpu>1</cpu>
@@ -19,10 +32,6 @@
   </default_resources>
 
   <search_ranges>
-    <delay>
-      <low>0</low>
-      <high>500000</high>
-    </delay>
     <time_scale_lambda>
       <low>-0.5</low>
       <high>0.5</high>

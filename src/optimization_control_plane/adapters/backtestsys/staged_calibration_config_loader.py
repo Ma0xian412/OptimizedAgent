@@ -7,7 +7,6 @@ from optimization_control_plane.adapters.backtestsys.staged_calibration_support 
     CalibrationConfig,
     DatasetDefinition,
     FloatRange,
-    IntRange,
 )
 
 _RESOURCE_KEYS = frozenset({"cpu", "memory_mb", "memory_gb", "gpu", "max_runtime_seconds"})
@@ -30,12 +29,11 @@ def load_calibration_config(config_path: Path) -> CalibrationConfig:
         datasets=datasets,
         max_failures=_read_positive_int(root, "max_failures"),
         baseline_trials=_read_positive_int(root, "baseline_trials"),
-        machine_delay_trials=_read_positive_int(root, "machine_delay_trials"),
-        contract_core_trials=_read_positive_int(root, "contract_core_trials"),
+        contract_trials=_read_positive_int(root, "contract_trials"),
         verify_trials=_read_positive_int(root, "verify_trials"),
+        machine_delay_map=_read_machine_delay_map(root, datasets),
         max_in_flight_trials=_read_optional_positive_int(root, "max_in_flight_trials", default=1),
         default_resources=_read_default_resources(root),
-        delay_range=_read_int_range(root, ("search_ranges", "delay")),
         time_scale_lambda_range=_read_float_range(root, ("search_ranges", "time_scale_lambda")),
         cancel_bias_k_range=_read_float_range(root, ("search_ranges", "cancel_bias_k")),
     )
@@ -53,15 +51,14 @@ def calibration_config_summary(config: CalibrationConfig, *, source: Path) -> di
         "python_executable": str(config.python_executable),
         "trials": {
             "baseline": config.baseline_trials,
-            "machine_delay": config.machine_delay_trials,
-            "contract_core": config.contract_core_trials,
+            "contract": config.contract_trials,
             "verify": config.verify_trials,
             "max_failures": config.max_failures,
         },
         "parallelism": {"max_in_flight_trials": config.max_in_flight_trials},
         "default_resources": dict(config.default_resources),
+        "machine_delay_map": dict(config.machine_delay_map),
         "search_ranges": {
-            "delay": {"low": config.delay_range.low, "high": config.delay_range.high},
             "time_scale_lambda": {
                 "low": config.time_scale_lambda_range.low,
                 "high": config.time_scale_lambda_range.high,
@@ -136,6 +133,27 @@ def _read_datasets(root: ET.Element) -> tuple[DatasetDefinition, ...]:
     return tuple(datasets)
 
 
+def _read_machine_delay_map(root: ET.Element, datasets: tuple[DatasetDefinition, ...]) -> dict[str, int]:
+    map_node = root.find("machine_delay_map")
+    if map_node is None:
+        raise ValueError("config.machine_delay_map is required")
+    result: dict[str, int] = {}
+    for index, item in enumerate(map_node.findall("item")):
+        prefix = f"config.machine_delay_map.item[{index}]"
+        machine = _read_required_text(item, "machine", f"{prefix}.machine")
+        if machine in result:
+            raise ValueError(f"config.machine_delay_map has duplicate machine: {machine}")
+        raw_delay = _read_required_text(item, "delay", f"{prefix}.delay")
+        result[machine] = _parse_non_negative_int(raw_delay, f"{prefix}.delay")
+    if not result:
+        raise ValueError("config.machine_delay_map must contain at least one item")
+    required_machines = {dataset.machine for dataset in datasets}
+    missing = sorted(required_machines.difference(result.keys()))
+    if missing:
+        raise ValueError(f"config.machine_delay_map missing machines: {', '.join(missing)}")
+    return result
+
+
 def _validate_unique_dataset_ids(datasets: list[DatasetDefinition]) -> None:
     seen: set[str] = set()
     for dataset in datasets:
@@ -199,15 +217,14 @@ def _parse_positive_int(raw: str, field_name: str) -> int:
     return value
 
 
-def _read_int_range(root: ET.Element, path: tuple[str, str]) -> IntRange:
-    node = _read_required_node(root, path, f"config.{'.'.join(path)}")
-    low = _parse_int(_read_required_text(node, "low", f"config.{'.'.join(path)}.low"), f"config.{'.'.join(path)}.low")
-    high = _parse_int(
-        _read_required_text(node, "high", f"config.{'.'.join(path)}.high"), f"config.{'.'.join(path)}.high"
-    )
-    if low > high:
-        raise ValueError(f"config.{'.'.join(path)} requires low <= high")
-    return IntRange(low=low, high=high)
+def _parse_non_negative_int(raw: str, field_name: str) -> int:
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a non-negative int, got: {raw}") from exc
+    if value < 0:
+        raise ValueError(f"{field_name} must be a non-negative int, got: {value}")
+    return value
 
 
 def _read_float_range(root: ET.Element, path: tuple[str, str]) -> FloatRange:
@@ -228,13 +245,6 @@ def _read_required_node(root: ET.Element, path: tuple[str, ...], field_name: str
     if node is None:
         raise ValueError(f"{field_name} is required")
     return node
-
-
-def _parse_int(raw: str, field_name: str) -> int:
-    try:
-        return int(raw)
-    except ValueError as exc:
-        raise ValueError(f"{field_name} must be an int, got: {raw}") from exc
 
 
 def _parse_float(raw: str, field_name: str) -> float:

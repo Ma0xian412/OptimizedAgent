@@ -69,6 +69,6 @@ python3 -m backtestsys_visualizer export \
 python3 -m backtestsys_visualizer export \
   --runtime-root ./runtime \
   --run-tag iter_backtestsys_20260312_120000 \
-  --stages baseline machine_delay_m1 final_verify
+  --stages baseline contract_c1 verify
 ```
 
