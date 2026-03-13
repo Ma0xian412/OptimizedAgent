@@ -19,6 +19,8 @@ from optimization_control_plane.ports.optimizer_backend import TrialContext
 
 _BACKTEST_ATTR_KEY = "backtest_config_patch"
 _RAW_COMPONENTS = ("curve", "terminal", "cancel", "post")
+_DEFAULT_DONEINFO_FILE = "PubOrderDoneInfoLog_m1_20260312_TEST_CONTRACT.csv"
+_DEFAULT_EXECUTIONDETAIL_FILE = "PubExecutionDetailLog_m1_20260312_TEST_CONTRACT.csv"
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,8 @@ class DatasetDefinition:
     market_data_file: str
     machine: str
     contract: str
+    groundtruth_doneinfo_file: str | None = None
+    groundtruth_executiondetail_file: str | None = None
 
 
 @dataclass(frozen=True)
@@ -73,6 +77,7 @@ def validate_required_paths(config: CalibrationConfig) -> None:
     required = [config.backtestsys_root / "main.py", config.base_config_path, config.mock_root / "replay_orders.csv",
                 config.mock_root / "replay_cancels.csv", config.mock_root / "contracts.xml"]
     required.extend(config.mock_root / item.market_data_file for item in config.datasets)
+    required.extend(_collect_groundtruth_paths(config))
     for path in required:
         if not path.exists():
             raise FileNotFoundError(f"required path not found: {path}")
@@ -92,8 +97,7 @@ def build_settings(config: CalibrationConfig, runtime_root: Path, *, spec_id: st
                    param_binding: dict[str, object] | None) -> dict[str, Any]:
     objective_config: dict[str, object] = {"name": "backtest_loss", "version": "v3_staged_calibration", "direction": "minimize",
                                            "params": _build_loss_params(baseline_raw),
-                                           "groundtruth": {"doneinfo_path": str(config.mock_root / "groundtruth" / "PubOrderDoneInfoLog_m1_20260312_TEST_CONTRACT.csv"),
-                                                           "executiondetail_path": str(config.mock_root / "groundtruth" / "PubExecutionDetailLog_m1_20260312_TEST_CONTRACT.csv")}}
+                                           "groundtruth": _build_groundtruth_config(config)}
     if backtest_search_space is not None:
         objective_config["backtest_search_space"] = backtest_search_space
     if backtest_fixed_params is not None:
@@ -203,3 +207,51 @@ def _load_best_trial(storage_dsn: str) -> optuna.trial.FrozenTrial:
     if not complete:
         raise ValueError("stage has no COMPLETE trials")
     return study.best_trial
+
+
+def _collect_groundtruth_paths(config: CalibrationConfig) -> tuple[Path, ...]:
+    groundtruth = _build_groundtruth_config(config)
+    paths = [
+        Path(str(groundtruth["doneinfo_path"])),
+        Path(str(groundtruth["executiondetail_path"])),
+    ]
+    datasets_cfg = groundtruth.get("datasets")
+    if isinstance(datasets_cfg, dict):
+        for dataset_cfg in datasets_cfg.values():
+            if not isinstance(dataset_cfg, dict):
+                continue
+            paths.append(Path(str(dataset_cfg["doneinfo_path"])))
+            paths.append(Path(str(dataset_cfg["executiondetail_path"])))
+    return tuple(paths)
+
+
+def _build_groundtruth_config(config: CalibrationConfig) -> dict[str, object]:
+    base = {
+        "doneinfo_path": str(config.mock_root / "groundtruth" / _DEFAULT_DONEINFO_FILE),
+        "executiondetail_path": str(config.mock_root / "groundtruth" / _DEFAULT_EXECUTIONDETAIL_FILE),
+    }
+    dataset_overrides: dict[str, dict[str, str]] = {}
+    for dataset in config.datasets:
+        doneinfo_file = dataset.groundtruth_doneinfo_file
+        executiondetail_file = dataset.groundtruth_executiondetail_file
+        if doneinfo_file is None and executiondetail_file is None:
+            continue
+        if doneinfo_file is None or executiondetail_file is None:
+            raise ValueError(
+                "dataset groundtruth override requires both doneinfo and executiondetail files: "
+                f"dataset_id={dataset.dataset_id}"
+            )
+        dataset_overrides[dataset.dataset_id] = {
+            "doneinfo_path": str(_resolve_groundtruth_path(config, doneinfo_file)),
+            "executiondetail_path": str(_resolve_groundtruth_path(config, executiondetail_file)),
+        }
+    if dataset_overrides:
+        base["datasets"] = dataset_overrides
+    return base
+
+
+def _resolve_groundtruth_path(config: CalibrationConfig, raw_path: str) -> Path:
+    path = Path(raw_path)
+    if path.is_absolute():
+        return path
+    return config.mock_root / "groundtruth" / raw_path
