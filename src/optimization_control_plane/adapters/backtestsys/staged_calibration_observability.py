@@ -124,7 +124,7 @@ class StagedCalibrationProgressReporter:
 
     def _emit(self, event: str, payload: dict[str, object], text_message: str) -> None:
         record = {
-            "ts": dt.datetime.now(dt.UTC).strftime(_EVENT_TIME_FORMAT),
+            "ts": dt.datetime.now(dt.timezone.utc).strftime(_EVENT_TIME_FORMAT),
             "run_tag": self._run_tag,
             "event": event,
             **payload,

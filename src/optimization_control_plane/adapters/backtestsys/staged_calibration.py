@@ -38,7 +38,7 @@ def run_staged_calibration(
     progress_format: str = "text",
 ) -> dict[str, object]:
     validate_required_paths(config)
-    run_tag = dt.datetime.now(dt.UTC).strftime("iter_backtestsys_%Y%m%d_%H%M%S")
+    run_tag = dt.datetime.now(dt.timezone.utc).strftime("iter_backtestsys_%Y%m%d_%H%M%S")
     runtime_root = config.runtime_root / run_tag
     runtime_root.mkdir(parents=True, exist_ok=True)
     reporter = StagedCalibrationProgressReporter(runtime_root, run_tag, output_format=progress_format)
