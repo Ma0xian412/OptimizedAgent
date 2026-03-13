@@ -80,7 +80,13 @@ def run_stage_with_progress(
     stage_root = runtime_root / "stages" / stage_name
     stage_root.mkdir(parents=True, exist_ok=True)
     storage_dsn = f"sqlite:///{(stage_root / 'study.db').resolve()}"
-    orchestrator = _build_orchestrator(storage_dsn=storage_dsn, data_root=stage_root / "ocp_data", search_space=search_space)
+    shared_cache_root = runtime_root.parent / "cache" / "ocp_shared"
+    orchestrator = _build_orchestrator(
+        storage_dsn=storage_dsn,
+        cache_root=shared_cache_root,
+        result_root=stage_root / "ocp_data",
+        search_space=search_space,
+    )
     _run_orchestrator_with_progress(
         orchestrator=orchestrator,
         settings=settings,
