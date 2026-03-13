@@ -9,14 +9,14 @@ from optimization_control_plane.core.orchestration._run_binding_factory import (
     build_bindings,
     enumerate_dataset_ids,
 )
+from optimization_control_plane.core.orchestration._trial_utils import (
+    build_trial_objective_key,
+    with_shared_run_attrs,
+)
 from optimization_control_plane.core.orchestration.inflight_registry import (
     InflightRegistry,
     RunBinding,
     TrialCohort,
-)
-from optimization_control_plane.core.orchestration._trial_utils import (
-    build_trial_objective_key,
-    with_shared_run_attrs,
 )
 from optimization_control_plane.domain.enums import DispatchDecision, TrialState
 from optimization_control_plane.domain.models import (
@@ -40,7 +40,7 @@ def _plan_and_fill(
     *,
     study_id: str,
     spec: ExperimentSpec,
-    groundtruth: GroundTruthData,
+    groundtruth_by_dataset: dict[str, GroundTruthData],
     profile: SamplerProfile,
     objective_def: ObjectiveDefinition,
     backend: OptimizerBackend,
@@ -72,7 +72,10 @@ def _plan_and_fill(
             params=params,
             dataset_ids=dataset_ids,
             spec=spec,
-            groundtruth_fingerprint=groundtruth.fingerprint,
+            groundtruth_fingerprints=_groundtruth_fingerprints(
+                dataset_ids=dataset_ids,
+                groundtruth_by_dataset=groundtruth_by_dataset,
+            ),
         )
         cached_trial_obj = objective_cache.get(trial_objective_key)
         if cached_trial_obj is not None:
@@ -91,7 +94,7 @@ def _plan_and_fill(
         bindings = build_bindings(
             objective_def=objective_def,
             spec=spec,
-            groundtruth=groundtruth,
+            groundtruth_by_dataset=groundtruth_by_dataset,
             params=params,
             dataset_ids=dataset_ids,
             trial_id=trial.trial_id,
@@ -111,7 +114,7 @@ def _plan_and_fill(
         _plan_trial_bindings(
             study_id=study_id,
             spec=spec,
-            groundtruth=groundtruth,
+            groundtruth_by_dataset=groundtruth_by_dataset,
             profile=profile,
             objective_def=objective_def,
             backend=backend,
@@ -133,7 +136,7 @@ def _plan_trial_bindings(
     *,
     study_id: str,
     spec: ExperimentSpec,
-    groundtruth: GroundTruthData,
+    groundtruth_by_dataset: dict[str, GroundTruthData],
     profile: SamplerProfile,
     objective_def: ObjectiveDefinition,
     backend: OptimizerBackend,
@@ -164,6 +167,10 @@ def _plan_trial_bindings(
 
         run_result = run_cache.get(binding.run_key)
         if run_result is not None:
+            groundtruth = _groundtruth_for_dataset(
+                dataset_id=binding.dataset_id,
+                groundtruth_by_dataset=groundtruth_by_dataset,
+            )
             evaluated = objective_def.objective_evaluator.evaluate(run_result, spec, groundtruth)
             objective_cache.put(binding.per_run_objective_key, evaluated)
             inflight_registry.record_run_complete(
@@ -271,3 +278,29 @@ def _should_stop_asking(state: StudyRuntimeState, max_trials: int | None, max_fa
     if max_trials is not None and state.asked_trials >= max_trials:
         return True
     return max_failures is not None and state.failed_trials >= max_failures
+
+
+def _groundtruth_for_dataset(
+    *,
+    dataset_id: str,
+    groundtruth_by_dataset: dict[str, GroundTruthData],
+) -> GroundTruthData:
+    groundtruth = groundtruth_by_dataset.get(dataset_id)
+    if groundtruth is None:
+        raise KeyError(f"missing groundtruth for dataset_id={dataset_id}")
+    return groundtruth
+
+
+def _groundtruth_fingerprints(
+    *,
+    dataset_ids: tuple[str, ...],
+    groundtruth_by_dataset: dict[str, GroundTruthData],
+) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for dataset_id in dataset_ids:
+        groundtruth = _groundtruth_for_dataset(
+            dataset_id=dataset_id,
+            groundtruth_by_dataset=groundtruth_by_dataset,
+        )
+        result[dataset_id] = groundtruth.fingerprint
+    return result
