@@ -20,7 +20,7 @@ _DONEINFO_NAME_PATTERN = re.compile(
     r"^PubOrderDoneInfoLog_(?P<machine_name>.+)_(?P<time>\d{8})_(?P<contract_id>.+)\.csv$"
 )
 _EXECUTIONDETAIL_NAME_PATTERN = re.compile(
-    r"^PubExecutionDetailLog_(?P<machine_name>.+)_(?P<time>\d{8})_(?P<contract_id>.+)\.csv$"
+    r"^PubExecutionDetailLog_(?P<machine_name>.+)_Day(?P<time>\d{8})_Id(?P<contract_id>.+)\.csv$"
 )
 _FINGERPRINT_KIND = "backtest_groundtruth_v1"
 _SHA_PREFIX = "sha256:"

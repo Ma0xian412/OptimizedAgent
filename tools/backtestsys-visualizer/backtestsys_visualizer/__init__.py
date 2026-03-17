@@ -1,0 +1,2 @@
+"""BackTestSys visualizer package."""
+
