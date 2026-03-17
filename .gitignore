@@ -9,3 +9,5 @@ build/
 .ruff_cache/
 data/
 *.db
+BackTestSys/
+runtime/

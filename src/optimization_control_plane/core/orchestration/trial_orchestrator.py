@@ -67,7 +67,7 @@ class TrialOrchestrator:
 
         self._study_handle: StudyHandle | None = None
         self._spec: ExperimentSpec | None = None
-        self._groundtruth: GroundTruthData | None = None
+        self._groundtruth_by_dataset: dict[str, GroundTruthData] = {}
         self._profile: SamplerProfile | None = None
         self._study_state = StudyRuntimeState()
         self._resource_state: ResourceState | None = None
@@ -96,7 +96,8 @@ class TrialOrchestrator:
 
         self._study_handle = self._backend.open_or_resume_experiment(resolved_spec)
         self._spec = self._backend.get_spec(self._study_handle.study_id)
-        self._groundtruth = self._load_groundtruth(self._spec)
+        dataset_ids = self._objective_def.dataset_enumerator.enumerate(self._spec)
+        self._groundtruth_by_dataset = self._load_groundtruth_by_dataset(self._spec, dataset_ids)
         self._profile = self._backend.get_sampler_profile(self._study_handle.study_id)
 
         max_in_flight = resolved_settings.get("parallelism", {}).get("max_in_flight_trials", 1)
@@ -111,7 +112,10 @@ class TrialOrchestrator:
             extra={
                 "study_id": self._study_handle.study_id,
                 "spec_hash": self._spec.spec_hash,
-                "groundtruth_fingerprint": self._groundtruth.fingerprint,
+                "groundtruth_fingerprints": {
+                    dataset_id: groundtruth.fingerprint
+                    for dataset_id, groundtruth in self._groundtruth_by_dataset.items()
+                },
                 "sampling_mode": self._profile.mode.value,
                 "max_in_flight": max_in_flight,
             },
@@ -121,7 +125,8 @@ class TrialOrchestrator:
     def _run_loop(self) -> None:
         assert self._study_handle is not None
         assert self._spec is not None
-        assert self._groundtruth is not None
+        if not self._groundtruth_by_dataset:
+            raise ValueError("groundtruth map must be initialized before running")
         assert self._profile is not None
         assert self._resource_state is not None
 
@@ -163,7 +168,8 @@ class TrialOrchestrator:
 
     def _plan_requests(self, study_id: str | None = None, target: int | None = None) -> None:
         assert self._spec is not None
-        assert self._groundtruth is not None
+        if not self._groundtruth_by_dataset:
+            raise ValueError("groundtruth map must be initialized before planning")
         assert self._profile is not None
         assert self._resource_state is not None
 
@@ -175,7 +181,7 @@ class TrialOrchestrator:
         _plan_and_fill(
             study_id=sid,
             spec=self._spec,
-            groundtruth=self._groundtruth,
+            groundtruth_by_dataset=self._groundtruth_by_dataset,
             profile=self._profile,
             objective_def=self._objective_def,
             backend=self._backend,
@@ -197,14 +203,15 @@ class TrialOrchestrator:
 
     def _handle_event(self, event: ExecutionEvent) -> None:
         assert self._spec is not None
-        assert self._groundtruth is not None
+        if not self._groundtruth_by_dataset:
+            raise ValueError("groundtruth map must be initialized before handling events")
         assert self._profile is not None
         assert self._study_handle is not None
 
         deps = EventHandlerDeps(
             study_id=self._study_handle.study_id,
             spec=self._spec,
-            groundtruth=self._groundtruth,
+            groundtruth_by_dataset=self._groundtruth_by_dataset,
             profile=self._profile,
             objective_def=self._objective_def,
             backend=self._backend,
@@ -280,16 +287,25 @@ class TrialOrchestrator:
         self._stop_requested = False
         self._metrics = Metrics()
 
-    def _load_groundtruth(self, spec: ExperimentSpec) -> GroundTruthData:
+    def _load_groundtruth_by_dataset(
+        self,
+        spec: ExperimentSpec,
+        dataset_ids: tuple[str, ...],
+    ) -> dict[str, GroundTruthData]:
         groundtruth_cfg = spec.objective_config.get("groundtruth")
         if not isinstance(groundtruth_cfg, dict):
             raise ValueError("spec.objective_config.groundtruth must be a dict")
-        data = self._groundtruth_provider.load(spec)
-        if not isinstance(data, GroundTruthData):
-            raise TypeError("groundtruth provider must return GroundTruthData")
-        if not data.fingerprint:
-            raise ValueError("groundtruth fingerprint must be a non-empty string")
-        return data
+        if not dataset_ids or len(set(dataset_ids)) != len(dataset_ids):
+            raise ValueError("dataset enumerator must return non-empty unique dataset_id tuple")
+        result: dict[str, GroundTruthData] = {}
+        for dataset_id in dataset_ids:
+            data = self._groundtruth_provider.load(spec, dataset_id=dataset_id)
+            if not isinstance(data, GroundTruthData):
+                raise TypeError("groundtruth provider must return GroundTruthData")
+            if not data.fingerprint:
+                raise ValueError("groundtruth fingerprint must be a non-empty string")
+            result[dataset_id] = data
+        return result
 
     def _resolve_start_spec(
         self,

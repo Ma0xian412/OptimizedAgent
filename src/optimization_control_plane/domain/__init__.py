@@ -6,6 +6,7 @@ from optimization_control_plane.domain.enums import (
     TrialState,
 )
 from optimization_control_plane.domain.models import (
+    OBJECTIVE_VALUE_KEY,
     Checkpoint,
     ExecutionEvent,
     ExecutionRequest,
@@ -33,6 +34,7 @@ __all__ = [
     "ExecutionRequest",
     "Job",
     "JobStatus",
+    "OBJECTIVE_VALUE_KEY",
     "ObjectiveResult",
     "ResourceState",
     "ResourceRequest",

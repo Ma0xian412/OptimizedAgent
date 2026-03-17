@@ -21,16 +21,17 @@ class FileObjectiveCache:
         data = _read_json(self._path(objective_key))
         if data is None:
             return None
+        attrs = dict(data.get("attrs", {}))
+        if "value" not in attrs and "value" in data:
+            attrs["value"] = data["value"]
         return ObjectiveResult(
-            value=data["value"],
-            attrs=data["attrs"],
+            attrs=attrs,
             artifact_refs=data.get("artifact_refs", []),
         )
 
     def put(self, objective_key: str, objective_result: ObjectiveResult) -> None:
         _atomic_write_json(self._path(objective_key), {
             "objective_key": objective_key,
-            "value": objective_result.value,
             "attrs": objective_result.attrs,
             "artifact_refs": objective_result.artifact_refs,
         })

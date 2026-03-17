@@ -7,10 +7,10 @@ from optimization_control_plane.domain.models import ExperimentSpec, GroundTruth
 
 @runtime_checkable
 class GroundTruthProvider(Protocol):
-    def load(self, spec: ExperimentSpec) -> GroundTruthData: ...
+    """Load ground truth data for evaluation.
 
-    def load_for_dataset(
-        self,
-        spec: ExperimentSpec,
-        dataset_id: str,
-    ) -> GroundTruthData: ...
+    Use dataset_id="" for experiment-level (shared) ground truth.
+    Use a concrete dataset_id to load per-dataset ground truth.
+    """
+
+    def load(self, spec: ExperimentSpec, dataset_id: str) -> GroundTruthData: ...

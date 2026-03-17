@@ -7,12 +7,12 @@ from typing import Any
 
 from optimization_control_plane.core.objective_definition import ObjectiveDefinition
 from optimization_control_plane.core.orchestration._metrics import Metrics
+from optimization_control_plane.core.orchestration._trial_utils import with_shared_run_attrs
 from optimization_control_plane.core.orchestration.inflight_registry import (
     InflightRegistry,
     RunBinding,
     TrialCohort,
 )
-from optimization_control_plane.core.orchestration._trial_utils import with_shared_run_attrs
 from optimization_control_plane.domain.enums import EventKind, JobStatus, TrialState
 from optimization_control_plane.domain.models import (
     ExecutionEvent,
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 class EventHandlerDeps:
     study_id: str
     spec: ExperimentSpec
-    groundtruth: GroundTruthData
+    groundtruth_by_dataset: dict[str, GroundTruthData]
     profile: SamplerProfile
     objective_def: ObjectiveDefinition
     backend: OptimizerBackend
@@ -68,9 +68,14 @@ def _handle_completed(deps: EventHandlerDeps, event: ExecutionEvent) -> None:
     run_result = deps.run_result_loader.load(entry.leader.run_spec)
     deps.run_cache.put(entry.run_key, run_result)
     deps.result_store.write_run_record(entry.run_key, run_result)
-    objective = deps.objective_def.objective_evaluator.evaluate(run_result, deps.spec, deps.groundtruth)
     bindings = deps.inflight_registry.pop_all_trials_for_run_key(entry.run_key)
+    objectives_by_dataset: dict[str, ObjectiveResult] = {}
     for binding in bindings:
+        objective = objectives_by_dataset.get(binding.dataset_id)
+        if objective is None:
+            groundtruth = _groundtruth_for_dataset(deps.groundtruth_by_dataset, binding.dataset_id)
+            objective = deps.objective_def.objective_evaluator.evaluate(run_result, deps.spec, groundtruth)
+            objectives_by_dataset[binding.dataset_id] = objective
         deps.objective_cache.put(binding.per_run_objective_key, objective)
         deps.inflight_registry.record_run_complete(
             trial_id=binding.trial_id,
@@ -245,3 +250,13 @@ def _event_kind_to_job_status(kind: EventKind) -> JobStatus:
         EventKind.CANCELLED: JobStatus.CANCELLED,
     }
     return mapping[kind]
+
+
+def _groundtruth_for_dataset(
+    groundtruth_by_dataset: dict[str, GroundTruthData],
+    dataset_id: str,
+) -> GroundTruthData:
+    groundtruth = groundtruth_by_dataset.get(dataset_id)
+    if groundtruth is None:
+        raise KeyError(f"missing groundtruth for dataset_id={dataset_id}")
+    return groundtruth

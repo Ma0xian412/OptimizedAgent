@@ -13,7 +13,6 @@ from optimization_control_plane.adapters.policies import (
 )
 from optimization_control_plane.adapters.storage import (
     FileObjectiveCache,
-    FileRunResultLoader,
     FileResultStore,
     FileRunCache,
 )
@@ -32,6 +31,7 @@ from tests.conftest import (
     StubGroundTruthProvider,
     StubObjectiveEvaluator,
     StubObjectiveKeyBuilder,
+    StubRunResultLoader,
     StubTrialResultAggregator,
     make_settings,
 )
@@ -80,9 +80,11 @@ class TestTPESamplerE2E:
         exec_be = FakeExecutionBackend()
         exec_be.set_default_script(FakeRunScript(
             run_result=RunResult(
-                metrics={"metric_1": 0.42},
-                diagnostics={"runtime_sec": 1.0},
-                artifact_refs=[],
+                payload={
+                    "metrics": {"metric_1": 0.42},
+                    "diagnostics": {"runtime_sec": 1.0},
+                    "artifact_refs": [],
+                },
             ),
         ))
 
@@ -104,7 +106,7 @@ class TestTPESamplerE2E:
             execution_backend=exec_be,
             parallelism_policy=AsyncFillParallelismPolicy(),
             dispatch_policy=SubmitNowDispatchPolicy(),
-            run_result_loader=FileRunResultLoader(),
+            run_result_loader=StubRunResultLoader(),
             run_cache=FileRunCache(os.path.join(str(tmp_path), "data")),
             objective_cache=FileObjectiveCache(os.path.join(str(tmp_path), "data")),
             result_store=FileResultStore(os.path.join(str(tmp_path), "data")),

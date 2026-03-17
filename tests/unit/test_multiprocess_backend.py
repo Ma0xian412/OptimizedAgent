@@ -4,13 +4,13 @@ from __future__ import annotations
 import os
 
 from optimization_control_plane.adapters.execution import MultiprocessExecutionBackend
-from optimization_control_plane.adapters.storage import FileRunResultLoader
 from optimization_control_plane.domain.enums import EventKind, JobStatus
 from optimization_control_plane.domain.models import (
     ExecutionRequest,
     Job,
     RunSpec,
 )
+from tests.conftest import StubRunResultLoader
 
 
 def _request(run_spec: RunSpec, request_id: str = "req_1") -> ExecutionRequest:
@@ -41,7 +41,7 @@ class TestMultiprocessBackend:
         script = tmp_path / "ok.py"  # type: ignore[union-attr]
         result = tmp_path / "ok_result.json"  # type: ignore[union-attr]
         script.write_text(
-            f'from pathlib import Path\nPath("{result}").write_text(\'{{"metrics":{{"loss":0.1}},"diagnostics":{{}},"artifact_refs":[]}}\')\n'
+            f'from pathlib import Path\nPath("{result}").write_text(\'{{"payload":{{"metrics":{{"loss":0.1}}}}}}\')\n'
             "import sys\nsys.exit(0)\n"
         )
         backend = MultiprocessExecutionBackend()
@@ -50,8 +50,8 @@ class TestMultiprocessBackend:
         event = backend.wait_any([handle], timeout=5.0)
         assert event is not None
         assert event.kind == EventKind.COMPLETED
-        loaded = FileRunResultLoader().load(spec)
-        assert loaded.metrics == {"loss": 0.1}
+        loaded = StubRunResultLoader().load(spec)
+        assert loaded.payload == {"metrics": {"loss": 0.1}}
 
     def test_wait_any_failed_exit_nonzero(self, tmp_path: object) -> None:
         script = tmp_path / "fail.py"  # type: ignore[union-attr]
@@ -68,7 +68,7 @@ class TestMultiprocessBackend:
         result = tmp_path / "result.json"  # type: ignore[union-attr]
         script = tmp_path / "result.py"  # type: ignore[union-attr]
         script.write_text(
-            f'from pathlib import Path\nPath("{result}").write_text(\'{{"metrics":{{"loss":0.5}},"diagnostics":{{"steps":10}},"artifact_refs":[]}}\')\n'
+            f'from pathlib import Path\nPath("{result}").write_text(\'{{"payload":{{"metrics":{{"loss":0.5}},"diagnostics":{{"steps":10}},"artifact_refs":[]}}}}\')\n'
             "import sys\n"
             "sys.exit(0)\n",
         )
@@ -85,7 +85,7 @@ class TestMultiprocessBackend:
         script.write_text(
             'print("__OCP_CHECKPOINT__" + \'{"step":1,"metrics":{"loss":0.8}}\')\n'
             'print("__OCP_CHECKPOINT__" + \'{"step":2,"metrics":{"loss":0.3}}\')\n'
-            f'from pathlib import Path\nPath("{result}").write_text(\'{{"metrics":{{"loss":0.3}},"diagnostics":{{}},"artifact_refs":[]}}\')\n'
+            f'from pathlib import Path\nPath("{result}").write_text(\'{{"payload":{{"metrics":{{"loss":0.3}},"diagnostics":{{}},"artifact_refs":[]}}}}\')\n'
             "import sys\n"
             "sys.exit(0)\n",
         )
